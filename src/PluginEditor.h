@@ -5,9 +5,8 @@
 #include <memory>
 #include <vector>
 
-class SectionPanel;
-
-// Top bar (MIDI channel, Send all, sent count) over a panel laid out like the Trigon-6 front panel.
+// Top bar (MIDI channel, Send all, sent count) over two tabs: Connection (ports, status, the synth's Globals
+// buttons) and Panel (laid out like the Trigon-6 front panel).
 class Trigon6Editor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -26,7 +25,8 @@ private:
     juce::Label title, channelLabel, status;
     juce::ComboBox channel;
     juce::TextButton sendAll { "Send all" };
-    std::vector<std::unique_ptr<SectionPanel>> sections;
+    class Tabs;
+    std::unique_ptr<Tabs> tabs;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Trigon6Editor)
 };

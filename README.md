@@ -4,9 +4,9 @@ A VST3 plugin (plus a standalone app) for Windows that controls a Sequential Tri
 Every program parameter of the synth is a plugin parameter you can automate. When one changes, the plugin sends it
 to the synth as an NRPN.
 
-Status: **stage 1**. The parameters, NRPN output on the plugin's MIDI out, the MIDI channel and the panel UI work.
-Still to do: direct output to a hardware port, reading NRPNs back from the synth, and Get patch over SysEx
-(see [Roadmap](#roadmap)).
+Status: **stage 2**. The parameters, NRPN output (through the host or straight to the synth's USB port), the MIDI
+channel, the panel UI and a Connection page work. Still to do: parameters following the synth's own knobs, and
+Get patch over SysEx (see [Roadmap](#roadmap)).
 
 ## Download
 
@@ -25,6 +25,30 @@ FL Studio scans, then rescan plugins in FL.
 | MIDI Channel | the same channel as in the plugin (or All) | |
 | MIDI Out | **USB** | when the synth is connected by USB |
 | MIDI SysEx | **USB** | for Get patch (stage 5) |
+
+## Connection page
+
+The plugin opens on **Connection** unless the synth is fully connected (then it opens on **Panel**).
+
+- **Send NRPN**: *Direct to the synth's port* (the default in the standalone app) or *Through the host* (the default
+  in a DAW). Input and output ports are picked by name; *Auto* takes the first port named "Trigon 6".
+  The ports are reopened by themselves when the synth is switched on or plugged in.
+- **Check** asks the synth who it is (device inquiry) and requests its global settings and its current sound (SysEx).
+  It changes nothing on the synth. It also runs by itself when the ports open.
+- **Status**: one line per check, green / yellow / red / grey, with what to fix: ports found and open, the synth
+  answers, both dumps arrive, and the globals the connection needs (MIDI Out, MIDI SysEx, Param Rcv, Param Xmit,
+  MIDI Channel). The last line shows knob moves arriving from the synth.
+- **Globals map**: the synth's labels above the program buttons are hard to read, so the page draws both rows of
+  buttons 0–9 with each setting's name, its current value and the value it needs.
+
+Windows gives a MIDI port to one program at a time. If FL Studio (or another app) has the Trigon ports open, the
+page says the port is busy.
+
+Global values come from two places: the synth sends a global as NRPN when you change it on the panel (checked on a
+Trigon-6: Param Xmit 1029, Param Rcv 1030, MIDI SysEx 1032, MIDI Out 1033, with values in the panel's order, e.g.
+Param Xmit 0 Off, 1 CC, 2 NR), and the global dump. The dump's order is not checked yet (assumed NRPN order), so a
+value seen only there is marked "?" and a mismatch is only a warning. The page shows the dump's raw values to check
+it against the synth.
 
 ## FL Studio
 
@@ -89,10 +113,14 @@ src/core/Nrpn.*         NRPN encode / decode
 src/core/Packed.*       DSI "packed MS bit" (1024 bytes <-> 1171 MIDI bytes)
 src/core/Sysex.*        requests (edit buffer, program, device inquiry) and the program dump parser
 src/core/SendQueue.*    what to send when: only changes, rate-limited
+src/core/Globals.*      the synth's global settings: button row/number, NRPN, value names, what the plugin needs
+src/core/Connection.*   the connection checklist, from a snapshot of what the MIDI layer saw
+src/midi/SynthLink.*    JUCE: opens the synth's ports, reconnects, sends NRPN/SysEx, records replies
 src/ui/PanelLayout.*    where each parameter sits on the panel
 src/PluginProcessor.*   JUCE: parameters (APVTS) from the table, NRPN out in processBlock
-src/PluginEditor.*      JUCE: the panel
-tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, table and layout checks
+src/PluginEditor.*      JUCE: top bar, tabs, the panel
+src/ui/ConnectionPage.* JUCE: the Connection page
+tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, globals, connection rules, table and layout
 ```
 
 `src/core` and `src/ui/PanelLayout` do not use JUCE, so the tests build in seconds.
@@ -100,7 +128,7 @@ tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, table and
 ## Roadmap
 
 1. ✅ Parameters, NRPN out, MIDI channel, rate limit, panel UI.
-2. MIDI output: the plugin's MIDI out (FL) or a hardware/USB port picked in the plugin (`juce::MidiOutput`).
+2. ✅ MIDI output: the plugin's MIDI out (FL) or the synth's port picked in the plugin. Connection page.
 3. Panel polish.
 4. Feedback: NRPNs from the synth update the plugin without being sent back. A monitor shows unknown NRPN numbers
    (for parameters still missing from the table).

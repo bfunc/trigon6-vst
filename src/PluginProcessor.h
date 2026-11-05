@@ -3,18 +3,21 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "core/SendQueue.h"
+#include "midi/SynthLink.h"
 
 #include <atomic>
 #include <vector>
 
-// Holds the Trigon-6 program parameters (built from t6::paramTable()) and sends every change as NRPN
-// on the plugin's MIDI output. It makes no sound.
+// Holds the Trigon-6 program parameters (built from t6::paramTable()) and sends every change as NRPN,
+// either on the plugin's MIDI output (host mode, the default in a DAW) or straight to the synth's port
+// (direct mode, the default in the standalone app). It makes no sound.
 class Trigon6Processor : public juce::AudioProcessor
 {
 public:
     Trigon6Processor();
+    ~Trigon6Processor() override;
 
-    void prepareToPlay (double sampleRate, int) override;
+    void prepareToPlay (double, int) override {}
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override { return true; }
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -44,17 +47,41 @@ public:
     void requestSendAll() { sendAllRequested = true; }
     int getSentCount() const { return sentCount.load(); }
 
+    SynthLink& getLink() { return link; }
+    bool isHostOutput() const { return link.isHostOutput(); }
+    void setHostOutput (bool host);
+    void setPortChoice (const juce::String& inputName, const juce::String& outputName);
+
 private:
+    template <typename Emit>
+    void runQueue (Emit&& emit);  // the caller holds queueLock
+    void pumpDirect();             // pump thread: direct mode sending
+
+    struct Pump : juce::Thread
+    {
+        explicit Pump (Trigon6Processor& p) : juce::Thread ("Trigon6 NRPN out"), proc (p) {}
+        void run() override
+        {
+            while (! threadShouldExit())
+            {
+                proc.pumpDirect();
+                wait (2);
+            }
+        }
+        Trigon6Processor& proc;
+    };
+
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     std::vector<std::atomic<float>*> raw;  // one per paramTable() entry, same order
     t6::SendQueue queue;
+    juce::CriticalSection queueLock;  // the audio thread only try-locks it
+    SynthLink link;
+    Pump pump { *this };
     std::atomic<int> midiChannel { 1 };
     std::atomic<bool> sendAllRequested { false };
     std::atomic<bool> needsPrime { true };  // after load: take current values as "already on the synth"
     std::atomic<int> sentCount { 0 };
-    double sampleRate = 44100.0;
-    double clockMs = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Trigon6Processor)
 };

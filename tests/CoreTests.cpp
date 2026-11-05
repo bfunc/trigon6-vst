@@ -1,5 +1,7 @@
 // Core tests: plain C++, no framework, no JUCE. Exit code 0 = all passed.
 
+#include "core/Connection.h"
+#include "core/Globals.h"
 #include "core/Nrpn.h"
 #include "core/Packed.h"
 #include "core/ParamTable.h"
@@ -239,8 +241,132 @@ static void testTable()
     CHECK (onPanel.size() == t.size());
 }
 
+static void testSysexReplies()
+{
+    // device inquiry reply: F0 7E 7F 06 02 01 2D 01 00 00 <0jjj nnnn> F7 -> version 1.2
+    const std::vector<uint8_t> inq { 0xF0, 0x7E, 0x7F, 0x06, 0x02, 0x01, 0x2D, 0x01, 0x00, 0x00, 0x21, 0xF7 };
+    auto info = parseDeviceInquiryReply (inq.data(), inq.size());
+    CHECK (info && info->isTrigon6 && info->versionMajor == 1 && info->versionMinor == 2);
+    CHECK (classifySysex (inq.data(), inq.size()) == SysexKind::DeviceInquiryReply);
+    CHECK (classifySysex (inq.data() + 1, inq.size() - 2) == SysexKind::DeviceInquiryReply);  // JUCE strips F0/F7
+
+    // global dump: 25 values as LS, MS nibbles
+    std::vector<uint8_t> gd { 0xF0, 0x01, 0x2D, 0x0F };
+    for (int i = 0; i < 25; ++i)
+    {
+        const int v = i == 2 ? 0x1F : i;  // value 31 at index 2 -> nibbles F, 1
+        gd.push_back ((uint8_t) (v & 0x0F));
+        gd.push_back ((uint8_t) (v >> 4));
+    }
+    gd.push_back (0xF7);
+    auto g = parseGlobalDump (gd.data(), gd.size());
+    CHECK (g && g->size() == 25 && (*g)[2] == 31 && (*g)[24] == 24);
+    CHECK (classifySysex (gd.data(), gd.size()) == SysexKind::GlobalDump);
+    gd.erase (gd.begin() + 5);
+    CHECK (! parseGlobalDump (gd.data(), gd.size()));
+
+    const auto rg = requestGlobals();
+    CHECK (rg == (std::vector<uint8_t> { 0xF0, 0x01, 0x2D, 0x0E, 0xF7 }));
+    const std::vector<uint8_t> eb { 0xF0, 0x01, 0x2D, 0x03, 0x00, 0xF7 };
+    CHECK (classifySysex (eb.data(), eb.size()) == SysexKind::EditBufferDump);
+}
+
+static void testGlobals()
+{
+    std::set<std::pair<int, int>> places;
+    for (const auto& gl : globalTable())
+    {
+        CHECK (places.insert ({ gl.row, gl.button }).second);
+        CHECK (gl.button >= 0 && gl.button <= 9 && (gl.row == 0 || gl.row == 1));
+    }
+    CHECK (places.size() == 20);
+    CHECK (std::string (globalAt (0, 8)->name) == "MIDI SysEx");
+    CHECK (std::string (globalAt (0, 9)->name) == "MIDI Out");
+    const auto* xmit = globalByNrpn (kGlobalParamXmit);
+    CHECK (xmit && globalValueName (*xmit, 2) == "NR" && globalValueName (*xmit, 9) == "raw 9");
+    CHECK (globalValueName (*globalByNrpn (1025), 15) == "+3");   // transpose: raw 12 = 0
+    CHECK (globalValueName (*globalByNrpn (kGlobalMidiChannel), 0) == "All");
+}
+
+static LinkSnapshot connectedSnapshot()
+{
+    LinkSnapshot s;
+    s.nowMs = 10000;
+    s.pluginChannel = 1;
+    s.inName = s.outName = "Trigon 6 Module";
+    s.inOpen = s.outOpen = true;
+    s.probeSentMs = 5000;
+    s.inquiryMs = 5100;
+    s.device.isTrigon6 = true;
+    s.globalsMs = 5300;
+    s.editBufferMs = 5600;
+    s.editBufferOk = true;
+    s.editBufferSize = 1175;
+    // what the synth sent while its globals were changed: Xmit NR, Rcv NR, SysEx USB, Out USB, channel 1
+    for (auto [n, v] : std::vector<std::pair<int, int>> { { 1029, 2 }, { 1030, 2 }, { 1032, 1 }, { 1033, 1 }, { 1026, 1 } })
+    {
+        s.globalNrpn[n] = v;
+        s.globalNrpnMs[n] = 6000;
+    }
+    s.globalsDump.assign (25, 0);
+    return s;
+}
+
+static void testConnection()
+{
+    auto s = connectedSnapshot();
+    auto rep = evaluate (s);
+    CHECK (rep.allOk);
+
+    // the NRPN a synth sent is newer than the dump, so it wins over the dump's 0
+    CHECK (readGlobal (s, 1032).known && readGlobal (s, 1032).raw == 1 && ! readGlobal (s, 1032).fromDump);
+    s.globalsMs = 7000;  // a newer dump says SysEx = 0: only a warning (dump order not checked yet)
+    CHECK (readGlobal (s, 1032).fromDump);
+    CHECK (globalHealth (s, *globalByNrpn (1032)) == (kDumpOrderVerified ? Health::Bad : Health::Warn));
+    CHECK (! evaluate (s).allOk);
+
+    // no answer to Check after the timeout
+    s = connectedSnapshot();
+    s.probeSentMs = 9000;
+    s.nowMs = 9000 + kProbeTimeoutMs + 1;
+    rep = evaluate (s);
+    CHECK (! rep.allOk);
+    CHECK (rep.items[2].health == Health::Bad);  // device inquiry
+    s.nowMs = 9100;  // still waiting
+    CHECK (evaluate (s).items[2].health == Health::Unknown);
+
+    // port busy
+    s = connectedSnapshot();
+    s.inOpen = false;
+    CHECK (evaluate (s).items[0].health == Health::Bad && ! evaluate (s).allOk);
+
+    // channel: synth on 5, plugin on 1 -> bad; synth on All -> ok
+    s = connectedSnapshot();
+    s.globalNrpn[1026] = 5;
+    CHECK (! evaluate (s).allOk);
+    s.globalNrpn[1026] = 0;
+    CHECK (evaluate (s).allOk);
+
+    // Param Xmit off, read from the synth's own NRPN -> bad
+    s.globalNrpn[1029] = 0;
+    CHECK (globalHealth (s, *globalByNrpn (1029)) == Health::Bad);
+
+    // host output needs no output port
+    s = connectedSnapshot();
+    s.hostOutput = true;
+    s.outOpen = false;
+    s.outName.clear();
+    CHECK (evaluate (s).allOk);
+
+    // knob moves are optional: none yet keeps allOk
+    CHECK (evaluate (connectedSnapshot()).items.back().health == Health::Unknown);
+}
+
 int main()
 {
+    testSysexReplies();
+    testGlobals();
+    testConnection();
     testNrpnEncode();
     testNrpnDecode();
     testPacked();

@@ -16,6 +16,22 @@ constexpr size_t kProgramPackedBytes = 1171;
 std::vector<uint8_t> requestEditBuffer();                     // F0 01 2D 06 F7
 std::vector<uint8_t> requestProgram (int bank, int program);  // F0 01 2D 05 bb pp F7
 std::vector<uint8_t> requestDeviceInquiry();                  // F0 7E 7F 06 01 F7
+std::vector<uint8_t> requestGlobals();                        // F0 01 2D 0E F7
+
+// Reply to the device inquiry: F0 7E cc 06 02 01 2D 01 00 00 <version> ... F7.
+struct DeviceInfo
+{
+    bool isTrigon6 = false;  // DSI ID 01, family 2D
+    int versionMajor = -1, versionMinor = -1;  // version byte 0jjj nnnn: jjj minor, nnnn major
+};
+std::optional<DeviceInfo> parseDeviceInquiryReply (const uint8_t* msg, size_t size);
+
+// Global parameters dump: F0 01 2D 0F <50 nibbles, LS then MS> F7 -> 25 values.
+constexpr size_t kGlobalCount = 25;
+std::optional<std::vector<int>> parseGlobalDump (const uint8_t* msg, size_t size);
+
+enum class SysexKind { Other, DeviceInquiryReply, GlobalDump, EditBufferDump, ProgramDump };
+SysexKind classifySysex (const uint8_t* msg, size_t size);
 
 // The 1024 unpacked program bytes from an edit buffer dump (F0 01 2D 03 <1171> F7)
 // or a program dump (F0 01 2D 02 bb pp <1171> F7). Nothing for any other message.

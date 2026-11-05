@@ -18,13 +18,16 @@ FetchContent_Declare(JUCE
     GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(JUCE)
 
-# Parameter table, NRPN/SysEx/packed coding, send queue, panel layout: plain C++, no JUCE, tested on its own.
+# Parameter and globals tables, NRPN/SysEx/packed coding, send queue, connection checklist, panel layout:
+# plain C++, no JUCE, tested on its own.
 add_library(t6_core STATIC
     src/core/ParamTable.cpp
     src/core/Nrpn.cpp
     src/core/Packed.cpp
     src/core/Sysex.cpp
     src/core/SendQueue.cpp
+    src/core/Globals.cpp
+    src/core/Connection.cpp
     src/ui/PanelLayout.cpp)
 target_include_directories(t6_core PUBLIC src)
 set_target_properties(t6_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -47,7 +50,9 @@ juce_add_plugin(Trigon6Control
 
 target_sources(Trigon6Control PRIVATE
     src/PluginProcessor.cpp
-    src/PluginEditor.cpp)
+    src/PluginEditor.cpp
+    src/midi/SynthLink.cpp
+    src/ui/ConnectionPage.cpp)
 
 target_include_directories(Trigon6Control PRIVATE src)
 

@@ -7,6 +7,14 @@
 namespace
 {
 const juce::Identifier kChannel { "midiChannel" };
+const juce::Identifier kOutputMode { "outputMode" };  // "host" or "direct"
+const juce::Identifier kInPort { "inputPort" };       // "" = automatic
+const juce::Identifier kOutPort { "outputPort" };
+
+bool isStandalone()
+{
+    return juce::PluginHostType::getPluginLoadedAs() == juce::AudioProcessor::wrapperType_Standalone;
+}
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout Trigon6Processor::createLayout()
@@ -50,6 +58,25 @@ Trigon6Processor::Trigon6Processor()
     for (const auto& p : t6::paramTable())
         raw.push_back (apvts.getRawParameterValue (p.id));
     apvts.state.setProperty (kChannel, 1, nullptr);
+
+    // The standalone app talks to the synth's port itself; in a DAW the host routes the plugin's MIDI out.
+    setHostOutput (! isStandalone());
+    pump.startThread();
+}
+
+Trigon6Processor::~Trigon6Processor() { pump.stopThread (1000); }
+
+void Trigon6Processor::setHostOutput (bool host)
+{
+    link.setHostOutput (host);
+    apvts.state.setProperty (kOutputMode, host ? "host" : "direct", nullptr);
+}
+
+void Trigon6Processor::setPortChoice (const juce::String& inputName, const juce::String& outputName)
+{
+    link.setPortChoice (inputName, outputName);
+    apvts.state.setProperty (kInPort, inputName, nullptr);
+    apvts.state.setProperty (kOutPort, outputName, nullptr);
 }
 
 void Trigon6Processor::setMidiChannel (int ch)
@@ -59,16 +86,9 @@ void Trigon6Processor::setMidiChannel (int ch)
     apvts.state.setProperty (kChannel, ch, nullptr);
 }
 
-void Trigon6Processor::prepareToPlay (double sr, int)
+template <typename Emit>
+void Trigon6Processor::runQueue (Emit&& emit)
 {
-    sampleRate = sr > 0 ? sr : 44100.0;
-}
-
-void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi)
-{
-    audio.clear();
-    midi.clear();  // incoming MIDI is not passed on (stage 4 reads it for feedback)
-
     const auto& table = t6::paramTable();
     // A choice parameter's raw value is the choice index, counted from the NRPN minimum.
     auto valueOf = [&] (size_t i)
@@ -88,14 +108,39 @@ void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::Midi
         queue.setValue (i, valueOf (i));
 
     const int ch = midiChannel.load();
-    queue.collect (clockMs, [&] (size_t i, int value)
+    queue.collect (juce::Time::getMillisecondCounterHiRes(), [&] (size_t i, int value)
     {
-        for (auto cc : t6::encodeNrpn (table[i].nrpn, value))
-            midi.addEvent (juce::MidiMessage::controllerEvent (ch, cc.controller, cc.value), 0);
+        emit (ch, table[i].nrpn, value);
         ++sentCount;
     });
+}
 
-    clockMs += 1000.0 * audio.getNumSamples() / sampleRate;
+void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi)
+{
+    audio.clear();
+    midi.clear();  // incoming MIDI is not passed on (the plugin reads the synth through its own input port)
+
+    if (! link.isHostOutput())
+        return;
+
+    link.drainHostOutput (midi);
+    const juce::ScopedTryLock sl (queueLock);
+    if (! sl.isLocked())
+        return;  // a mode switch is in progress; the next block sends
+    runQueue ([&] (int ch, int param, int value)
+    {
+        for (auto cc : t6::encodeNrpn (param, value))
+            midi.addEvent (juce::MidiMessage::controllerEvent (ch, cc.controller, cc.value), 0);
+    });
+}
+
+void Trigon6Processor::pumpDirect()
+{
+    // Until the port is open, changes stay pending and go out once it is.
+    if (link.isHostOutput() || ! link.isOutputOpen())
+        return;
+    const juce::ScopedLock sl (queueLock);
+    runQueue ([&] (int ch, int param, int value) { link.sendNrpn (ch, param, value); });
 }
 
 void Trigon6Processor::getStateInformation (juce::MemoryBlock& dest)
@@ -111,6 +156,9 @@ void Trigon6Processor::setStateInformation (const void* data, int size)
         {
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             midiChannel = juce::jlimit (1, 16, (int) apvts.state.getProperty (kChannel, 1));
+            if (apvts.state.hasProperty (kOutputMode))
+                link.setHostOutput (apvts.state.getProperty (kOutputMode).toString() == "host");
+            link.setPortChoice (apvts.state.getProperty (kInPort).toString(), apvts.state.getProperty (kOutPort).toString());
             needsPrime = true;  // a loaded project does not overwrite the synth; "Send all" does that
         }
 }

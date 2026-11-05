@@ -14,11 +14,64 @@ std::vector<uint8_t> requestProgram (int bank, int program)
 
 std::vector<uint8_t> requestDeviceInquiry() { return { 0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7 }; }
 
-std::optional<std::vector<uint8_t>> parseProgramDump (const uint8_t* msg, size_t size)
+std::vector<uint8_t> requestGlobals() { return { 0xF0, kDsiId, kTrigon6Id, 0x0E, 0xF7 }; }
+
+namespace
 {
-    // Accept the message with or without F0/F7 (JUCE's getSysExData() strips them).
+// Accept a message with or without F0/F7 (JUCE's getSysExData() strips them).
+void strip (const uint8_t*& msg, size_t& size)
+{
     if (size > 0 && msg[0] == 0xF0) { ++msg; --size; }
     if (size > 0 && msg[size - 1] == 0xF7) --size;
+}
+} // namespace
+
+std::optional<DeviceInfo> parseDeviceInquiryReply (const uint8_t* msg, size_t size)
+{
+    strip (msg, size);
+    // 7E cc 06 02 <manufacturer> <family LS> <family MS> <member LS> <member MS> <version>
+    if (size < 5 || msg[0] != 0x7E || msg[2] != 0x06 || msg[3] != 0x02)
+        return std::nullopt;
+    DeviceInfo info;
+    info.isTrigon6 = size >= 6 && msg[4] == kDsiId && msg[5] == kTrigon6Id;
+    if (size >= 10)
+    {
+        info.versionMajor = msg[9] & 0x0F;
+        info.versionMinor = (msg[9] >> 4) & 0x07;
+    }
+    return info;
+}
+
+std::optional<std::vector<int>> parseGlobalDump (const uint8_t* msg, size_t size)
+{
+    strip (msg, size);
+    if (size != 3 + 2 * kGlobalCount || msg[0] != kDsiId || msg[1] != kTrigon6Id || msg[2] != 0x0F)
+        return std::nullopt;
+    std::vector<int> values (kGlobalCount);
+    for (size_t i = 0; i < kGlobalCount; ++i)
+        values[i] = (msg[3 + 2 * i] & 0x0F) | ((msg[4 + 2 * i] & 0x0F) << 4);
+    return values;
+}
+
+SysexKind classifySysex (const uint8_t* msg, size_t size)
+{
+    if (parseDeviceInquiryReply (msg, size))
+        return SysexKind::DeviceInquiryReply;
+    strip (msg, size);
+    if (size < 3 || msg[0] != kDsiId || msg[1] != kTrigon6Id)
+        return SysexKind::Other;
+    switch (msg[2])
+    {
+        case 0x0F: return SysexKind::GlobalDump;
+        case 0x03: return SysexKind::EditBufferDump;
+        case 0x02: return SysexKind::ProgramDump;
+        default:   return SysexKind::Other;
+    }
+}
+
+std::optional<std::vector<uint8_t>> parseProgramDump (const uint8_t* msg, size_t size)
+{
+    strip (msg, size);
 
     if (size < 3 || msg[0] != kDsiId || msg[1] != kTrigon6Id)
         return std::nullopt;

@@ -1,7 +1,9 @@
 #include "PluginEditor.h"
 
 #include "core/ParamTable.h"
+#include "ui/ConnectionPage.h"
 #include "ui/PanelLayout.h"
+#include "ui/Theme.h"
 
 #include <cstring>
 
@@ -9,15 +11,7 @@ namespace
 {
 using APVTS = juce::AudioProcessorValueTreeState;
 
-namespace colours
-{
-const juce::Colour background { 0xff141416 };
-const juce::Colour section { 0xff222226 };
-const juce::Colour border { 0xff3a3a40 };
-const juce::Colour text { 0xffe8e8ea };
-const juce::Colour dim { 0xff8a8a92 };
-const juce::Colour led { 0xffe0402c };
-}
+namespace colours = theme;
 
 const t6::ParamDef* findParam (const std::string& id)
 {
@@ -184,6 +178,58 @@ private:
     int columns = 1;
 };
 
+// The synth's front panel: section boxes placed by the fractions in PanelLayout.
+class PanelPage : public juce::Component
+{
+public:
+    explicit PanelPage (APVTS& state)
+    {
+        for (const auto& l : t6ui::panelLayout())
+        {
+            sections.push_back (std::make_unique<SectionPanel> (state, l));
+            addAndMakeVisible (*sections.back());
+        }
+    }
+
+    void paint (juce::Graphics& g) override { g.fillAll (colours::background); }
+
+    void resized() override
+    {
+        const auto area = getLocalBounds().reduced (6).toFloat();
+        for (auto& s : sections)
+        {
+            const auto& l = s->layout;
+            s->setBounds (juce::Rectangle<float> (area.getX() + l.x * area.getWidth(), area.getY() + l.y * area.getHeight(),
+                                                  l.w * area.getWidth(), l.h * area.getHeight())
+                              .toNearestInt());
+        }
+    }
+
+private:
+    std::vector<std::unique_ptr<SectionPanel>> sections;
+};
+
+class Trigon6Editor::Tabs : public juce::TabbedComponent
+{
+public:
+    Tabs() : juce::TabbedComponent (juce::TabbedButtonBar::TabsAtTop) {}
+    void currentTabChanged (int, const juce::String&) override
+    {
+        if (! programmatic)
+            userPicked = true;
+    }
+    void show (int index)
+    {
+        programmatic = true;
+        setCurrentTabIndex (index);
+        programmatic = false;
+    }
+    bool userPicked = false;
+
+private:
+    bool programmatic = false;
+};
+
 Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), proc (p)
 {
     lnf.setColour (juce::Slider::rotarySliderFillColourId, colours::led);
@@ -214,11 +260,22 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     status.setColour (juce::Label::textColourId, colours::dim);
     addAndMakeVisible (status);
 
-    for (const auto& l : t6ui::panelLayout())
+    // Connection first; the editor opens on it unless the synth is fully connected.
+    tabs = std::make_unique<Tabs>();
+    tabs->setTabBarDepth (32);
+    tabs->setOutline (0);
+    auto* connection = new ConnectionPage (proc);
+    tabs->addTab ("Connection", colours::section, connection, true);
+    tabs->addTab ("Panel", colours::section, new PanelPage (proc.apvts), true);
+    tabs->show (connection->getReport().allOk ? 1 : 0);
+    // Just after opening (the standalone app checks the synth on start), move to the panel once all is green.
+    const auto openedMs = juce::Time::getMillisecondCounter();
+    connection->onReportChanged = [this, connection, openedMs]
     {
-        sections.push_back (std::make_unique<SectionPanel> (proc.apvts, l));
-        addAndMakeVisible (*sections.back());
-    }
+        if (connection->getReport().allOk && ! tabs->userPicked && juce::Time::getMillisecondCounter() - openedMs < 8000)
+            tabs->show (1);
+    };
+    addAndMakeVisible (*tabs);
 
     setResizable (true, true);
     setResizeLimits (1000, 560, 2600, 1400);
@@ -226,7 +283,11 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     startTimerHz (4);
 }
 
-Trigon6Editor::~Trigon6Editor() { setLookAndFeel (nullptr); }
+Trigon6Editor::~Trigon6Editor()
+{
+    tabs.reset();
+    setLookAndFeel (nullptr);
+}
 
 void Trigon6Editor::paint (juce::Graphics& g) { g.fillAll (colours::background); }
 
@@ -235,23 +296,18 @@ void Trigon6Editor::resized()
     auto r = getLocalBounds();
     auto bar = r.removeFromTop (40).reduced (10, 6);
     title.setBounds (bar.removeFromLeft (240));
-    status.setBounds (bar.removeFromRight (180));
+    status.setBounds (bar.removeFromRight (230));
     sendAll.setBounds (bar.removeFromRight (100));
     bar.removeFromRight (16);
     channel.setBounds (bar.removeFromRight (70));
     channelLabel.setBounds (bar.removeFromRight (110));
 
-    const auto area = r.reduced (6).toFloat();
-    for (auto& s : sections)
-    {
-        const auto& l = s->layout;
-        s->setBounds (juce::Rectangle<float> (area.getX() + l.x * area.getWidth(), area.getY() + l.y * area.getHeight(),
-                                              l.w * area.getWidth(), l.h * area.getHeight())
-                          .toNearestInt());
-    }
+    tabs->setBounds (r);
 }
 
 void Trigon6Editor::timerCallback()
 {
-    status.setText ("NRPN sent: " + juce::String (proc.getSentCount()), juce::dontSendNotification);
+    status.setText ("NRPN sent: " + juce::String (proc.getSentCount())
+                        + (proc.isHostOutput() ? "  (host)" : proc.getLink().isOutputOpen() ? "  (port)" : "  (no port)"),
+                    juce::dontSendNotification);
 }
