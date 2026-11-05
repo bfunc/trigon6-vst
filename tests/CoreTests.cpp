@@ -112,15 +112,15 @@ static void testPacked()
 
 static void testSysex()
 {
-    CHECK ((requestEditBuffer() == std::vector<uint8_t> { 0xF0, 0x01, 0x2D, 0x06, 0xF7 }));
-    CHECK ((requestProgram (9, 99) == std::vector<uint8_t> { 0xF0, 0x01, 0x2D, 0x05, 9, 99, 0xF7 }));
+    CHECK ((requestEditBuffer() == std::vector<uint8_t> { 0xF0, 0x01, 0x39, 0x06, 0xF7 }));
+    CHECK ((requestProgram (9, 99) == std::vector<uint8_t> { 0xF0, 0x01, 0x39, 0x05, 9, 99, 0xF7 }));
 
     std::vector<uint8_t> prog (1024);
     for (size_t i = 0; i < prog.size(); ++i)
         prog[i] = (uint8_t) (255 - i % 256);
     auto packed = packMsBit (prog.data(), prog.size());
 
-    std::vector<uint8_t> edit { 0xF0, 0x01, 0x2D, 0x03 };
+    std::vector<uint8_t> edit { 0xF0, 0x01, 0x39, 0x03 };
     edit.insert (edit.end(), packed.begin(), packed.end());
     edit.push_back (0xF7);
     auto got = parseProgramDump (edit.data(), edit.size());
@@ -129,7 +129,7 @@ static void testSysex()
     got = parseProgramDump (edit.data() + 1, edit.size() - 2);
     CHECK (got && *got == prog);
 
-    std::vector<uint8_t> stored { 0xF0, 0x01, 0x2D, 0x02, 3, 42 };
+    std::vector<uint8_t> stored { 0xF0, 0x01, 0x39, 0x02, 3, 42 };
     stored.insert (stored.end(), packed.begin(), packed.end());
     stored.push_back (0xF7);
     got = parseProgramDump (stored.data(), stored.size());
@@ -137,7 +137,7 @@ static void testSysex()
 
     edit[2] = 0x2C;  // another DSI synth
     CHECK (! parseProgramDump (edit.data(), edit.size()));
-    std::vector<uint8_t> shortMsg { 0xF0, 0x01, 0x2D, 0x03, 0x00, 0xF7 };
+    std::vector<uint8_t> shortMsg { 0xF0, 0x01, 0x39, 0x03, 0x00, 0xF7 };
     CHECK (! parseProgramDump (shortMsg.data(), shortMsg.size()));
 }
 
@@ -244,19 +244,20 @@ static void testTable()
 
 static void testSysexReplies()
 {
-    // device inquiry reply: F0 7E 7F 06 02 01 2D 01 00 00 <0jjj nnnn> F7 -> version 1.2
-    const std::vector<uint8_t> inq { 0xF0, 0x7E, 0x7F, 0x06, 0x02, 0x01, 0x2D, 0x01, 0x00, 0x00, 0x21, 0xF7 };
+    // device inquiry reply: F0 7E 7F 06 02 01 39 01 00 00 <0jjj nnnn> F7 -> version 1.2
+    const std::vector<uint8_t> inq { 0xF0, 0x7E, 0x7F, 0x06, 0x02, 0x01, 0x39, 0x01, 0x00, 0x00, 0x21, 0xF7 };
     auto info = parseDeviceInquiryReply (inq.data(), inq.size());
     CHECK (info && info->isTrigon6 && info->versionMajor == 1 && info->versionMinor == 2);
-    CHECK (info->raw == "7E 7F 06 02 01 2D 01 00 00 21");
-    CHECK (info->manufacturer == 0x01 && info->family == 0x2D);
+    CHECK (info->raw == "7E 7F 06 02 01 39 01 00 00 21");
+    CHECK (info->manufacturer == 0x01 && info->family == 0x39);
+    CHECK (toHex (inq.data(), inq.size(), 3) == "F0 7E 7F ...");
     // another model byte: requests and parsing follow the id they are given
     CHECK ((requestGlobals (0x3A) == std::vector<uint8_t> { 0xF0, 0x01, 0x3A, 0x0E, 0xF7 }));
     CHECK (classifySysex (inq.data(), inq.size()) == SysexKind::DeviceInquiryReply);
     CHECK (classifySysex (inq.data() + 1, inq.size() - 2) == SysexKind::DeviceInquiryReply);  // JUCE strips F0/F7
 
     // global dump: 25 values as LS, MS nibbles
-    std::vector<uint8_t> gd { 0xF0, 0x01, 0x2D, 0x0F };
+    std::vector<uint8_t> gd { 0xF0, 0x01, 0x39, 0x0F };
     for (int i = 0; i < 25; ++i)
     {
         const int v = i == 2 ? 0x1F : i;  // value 31 at index 2 -> nibbles F, 1
@@ -271,8 +272,8 @@ static void testSysexReplies()
     CHECK (! parseGlobalDump (gd.data(), gd.size()));
 
     const auto rg = requestGlobals();
-    CHECK (rg == (std::vector<uint8_t> { 0xF0, 0x01, 0x2D, 0x0E, 0xF7 }));
-    const std::vector<uint8_t> eb { 0xF0, 0x01, 0x2D, 0x03, 0x00, 0xF7 };
+    CHECK (rg == (std::vector<uint8_t> { 0xF0, 0x01, 0x39, 0x0E, 0xF7 }));
+    const std::vector<uint8_t> eb { 0xF0, 0x01, 0x39, 0x03, 0x00, 0xF7 };
     CHECK (classifySysex (eb.data(), eb.size()) == SysexKind::EditBufferDump);
 }
 

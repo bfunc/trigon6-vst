@@ -312,6 +312,7 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
         const auto id = (uint8_t) sysexId.load();
         const juce::ScopedLock sl (stateLock);
         state.lastAnyInMs = t;
+        auto noteOther = [&] { state.otherSysex = std::to_string (n + 2) + " bytes: F0 " + t6::toHex (d, n, 16); };
         switch (t6::classifySysex (d, n, id))
         {
             case t6::SysexKind::DeviceInquiryReply:
@@ -327,13 +328,15 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
                     state.globalsDump = *g;
                     state.globalsMs = t;
                 }
+                else
+                    noteOther();
                 break;
             case t6::SysexKind::EditBufferDump:
                 state.editBufferSize = n + 2;
                 state.editBufferOk = t6::parseProgramDump (d, n, id).has_value();
                 state.editBufferMs = t;
                 break;
-            default: break;
+            default: noteOther(); break;
         }
         return;
     }

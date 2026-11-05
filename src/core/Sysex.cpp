@@ -39,20 +39,29 @@ std::optional<DeviceInfo> parseDeviceInquiryReply (const uint8_t* msg, size_t si
         info.manufacturer = msg[4];
         info.family = msg[5];
     }
-    static const char* hex = "0123456789ABCDEF";
-    for (size_t i = 0; i < size && i < 32; ++i)
-    {
-        if (i > 0)
-            info.raw += ' ';
-        info.raw += hex[msg[i] >> 4];
-        info.raw += hex[msg[i] & 0x0F];
-    }
+    info.raw = toHex (msg, size);
     if (size >= 10)
     {
         info.versionMajor = msg[9] & 0x0F;
         info.versionMinor = (msg[9] >> 4) & 0x07;
     }
     return info;
+}
+
+std::string toHex (const uint8_t* msg, size_t size, size_t maxBytes)
+{
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    for (size_t i = 0; i < size && i < maxBytes; ++i)
+    {
+        if (i > 0)
+            out += ' ';
+        out += hex[msg[i] >> 4];
+        out += hex[msg[i] & 0x0F];
+    }
+    if (size > maxBytes)
+        out += " ...";
+    return out;
 }
 
 std::optional<std::vector<int>> parseGlobalDump (const uint8_t* msg, size_t size, uint8_t id)

@@ -34,6 +34,7 @@ struct LinkSnapshot
     double editBufferMs = -1;
     bool editBufferOk = false;
     size_t editBufferSize = 0;
+    std::string otherSysex;  // the last SysEx from the synth the plugin did not use: size and first bytes
 
     int nrpnInCount = 0;
     double lastNrpnMs = -1;

@@ -282,6 +282,8 @@ Report evaluate (const LinkSnapshot& s)
                                                              : "Sound dump has " + std::to_string (s.editBufferSize)
                                                                    + " bytes instead of 1171.")
                                            : "No sound dump.");
+        if (s.globalsMs < 0 && ! s.otherSysex.empty())
+            sx.detail += " Other SysEx: " + s.otherSysex;
         if (sx.health == Health::Warn)
             sx.fix = "Press Check again. If the size stays wrong, the USB MIDI driver cuts long SysEx.";
     }
@@ -414,7 +416,7 @@ Report evaluate (const LinkSnapshot& s)
         if (s.device.manufacturer == 0x01)
             w.push_back ({ Health::Warn, "Unexpected model ID",
                            "A Sequential synth answered with model " + hexByte (s.device.family)
-                               + " (expected 2D). Dump requests now use its ID. Reply: " + s.device.raw,
+                               + " (expected " + hexByte (kTrigon6Id) + "). Dump requests now use its ID. Reply: " + s.device.raw,
                            "If this is the Trigon-6, send this reply to the developer." });
         else
             w.push_back ({ Health::Warn, "Not a Trigon-6",
