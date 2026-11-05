@@ -4,7 +4,7 @@
 
 namespace
 {
-enum Column { kProgramColumn = 1, kNameColumn, kStatusColumn };
+enum Column { kProgramColumn = 1, kNameColumn, kTypeColumn, kStatusColumn };
 
 juce::File documentsFolder (const char* sub)
 {
@@ -52,6 +52,7 @@ PresetsPage::PresetsPage (Trigon6Processor& p)
     auto& header = table.getHeader();
     header.addColumn ("Program", kProgramColumn, 90, 70, 120, juce::TableHeaderComponent::notSortable);
     header.addColumn ("Name", kNameColumn, 280, 120, 600, juce::TableHeaderComponent::notSortable);
+    header.addColumn ("Type", kTypeColumn, 90, 60, 160, juce::TableHeaderComponent::notSortable);
     header.addColumn ("Status", kStatusColumn, 110, 80, 200, juce::TableHeaderComponent::notSortable);
     table.setMultipleSelectionEnabled (true);
     table.setRowHeight (24);
@@ -223,6 +224,7 @@ void PresetsPage::paintCell (juce::Graphics& g, int row, int column, int width, 
     {
         case kProgramColumn: text = juce::String (t6::programLabel (currentBank(), row)); g.setColour (theme::dim); break;
         case kNameColumn:    text = juce::String (e.name); break;
+        case kTypeColumn:    text = juce::String (t6::programType (e.name)); g.setColour (theme::dim); break;
         case kStatusColumn:  text = t6::statusName (e.status); g.setColour (statusColour (e.status)); break;
         default: break;
     }
@@ -290,7 +292,7 @@ void PresetsPage::saveAll()
         if (dir == juce::File())
             return;
         dir.createDirectory();
-        juce::String index ("Program\tBank\tNumber\tName\tFile\n");
+        juce::String index ("Program\tBank\tNumber\tName\tType\tFile\n");
         int written = 0;
         for (int b = 0; b < t6::kBankCount; ++b)
             for (int p = 0; p < t6::kProgramsPerBank; ++p)
@@ -306,7 +308,7 @@ void PresetsPage::saveAll()
                 if (file.replaceWithData (e.sysex.data(), e.sysex.size()))
                 {
                     ++written;
-                    index << juce::String (t6::programLabel (b, p)) << "\t" << b << "\t" << p << "\t" << juce::String (e.name) << "\t"
+                    index << juce::String (t6::programLabel (b, p)) << "\t" << b << "\t" << p << "\t" << juce::String (e.name) << "\t" << juce::String (t6::programType (e.name)) << "\t"
                           << file.getFileName() << "\n";
                 }
             }

@@ -22,6 +22,10 @@ constexpr size_t kNameOffset = 116;
 constexpr size_t kNameLength = 20;
 std::string programName (const std::vector<uint8_t>& data);
 
+// A type guessed from the name ("Bamboo Bass" -> "Bass"); "" when the name gives no hint.
+// The synth itself stores no category.
+std::string programType (const std::string& name);
+
 // "U 023", "F 412": how the synth shows a program.
 std::string programLabel (int bank, int program);
 // "U023 Bright Bass.syx": characters Windows does not allow become '_'.

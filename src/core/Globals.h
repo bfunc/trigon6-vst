@@ -33,6 +33,9 @@ const GlobalDef* globalAt (int row, int button);
 constexpr int kGlobalNrpnBase = 1024;
 inline bool isGlobalNrpn (int nrpn) { return nrpn >= kGlobalNrpnBase && nrpn < kGlobalNrpnBase + 64; }
 
+// What a setting does and what its values mean, for the hover help on the Connection page.
+std::string globalHelp (const GlobalDef& g);
+
 // "NR", "All", "+3", or "raw 7" when out of range.
 std::string globalValueName (const GlobalDef& g, int raw);
 

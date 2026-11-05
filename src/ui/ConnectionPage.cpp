@@ -323,9 +323,9 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
 
     {
         auto tl = layoutText ("How to change a setting",
-                              "1. Press GLOBALS once: red LED = top row. Press it again: yellow LED = bottom row.\n"
-                              "2. Press the program button 0-9 of the setting (the numbers below).\n"
-                              "3. BANK steps the value up, TENS steps it down.  4. Press GLOBALS to leave.",
+                              "1. Press GLOBALS once (red LED). 2. Press the program button 0-9 of the setting.\n"
+                              "3. BANK steps the value up, TENS steps it down.  4. Press GLOBALS to leave.\n"
+                              "Pressing GLOBALS twice (yellow LED) gives a second set of settings: hover over a button to see both.",
                               (float) r.getWidth());
         tl.draw (g, r.removeFromTop ((int) std::ceil (tl.getHeight())).toFloat());
     }
@@ -335,7 +335,7 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
     juce::String footer;
     if (snap.globalsMs >= 0)
     {
-        footer << "Global dump received " << juce::String ((snap.nowMs - snap.globalsMs) / 1000.0, 0) << " s ago. Raw values: ";
+        footer << "Global dump received. Raw values: ";
         for (size_t i = 0; i < snap.globalsDump.size(); ++i)
             footer << snap.globalsDump[i] << (i + 1 < snap.globalsDump.size() ? " " : "");
         footer << ".  Values marked ? come only from the dump, whose order is not checked yet. A white frame marks the button to press now.";
@@ -347,25 +347,17 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
     footerTl.draw (g, footerArea.toFloat());
     r.removeFromBottom (8);
 
-    const int rowGap = 10;
-    const int titleH = 22;
-    const int rowH = (r.getHeight() - 2 * titleH - rowGap) / 2;
-    for (int row = 0; row < 2; ++row)
+    // The settings with GLOBALS pressed once; the second set (pressed twice) is in each button's hover help.
+    const int rowH = juce::jmin (r.getHeight(), 190);
     {
-        auto title = r.removeFromTop (titleH);
-        g.setColour (row == 0 ? theme::led : theme::lowerRow);
-        g.fillEllipse ((float) title.getX(), (float) title.getCentreY() - 5.0f, 10.0f, 10.0f);
-        g.setColour (theme::text);
-        g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-        g.drawText (row == 0 ? "TOP ROW  (GLOBALS pressed once, red LED)" : "BOTTOM ROW  (GLOBALS pressed twice, yellow LED)",
-                    title.withTrimmedLeft (16), juce::Justification::centredLeft);
-
+        const int row = 0;
         auto cells = r.removeFromTop (rowH);
         const float cellW = (float) cells.getWidth() / 10.0f;
         for (int b = 0; b < 10; ++b)
         {
             const auto* def = t6::globalAt (row, b);
             auto c = juce::Rectangle<float> ((float) cells.getX() + b * cellW, (float) cells.getY(), cellW, (float) cells.getHeight()).reduced (3.0f);
+            globalCells[(size_t) b] = c;
             const bool required = def != nullptr && t6::isRequiredGlobal (*def);
             const auto health = def != nullptr ? t6::globalHealth (snap, *def) : t6::Health::Unknown;
 
@@ -404,6 +396,29 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
                 g.drawFittedText ("need: " + want, inner.removeFromTop (34.0f).toNearestInt(), juce::Justification::centredTop, 2);
             }
         }
-        r.removeFromTop (rowGap);
     }
+}
+
+juce::String ConnectionPage::getTooltip()
+{
+    const auto pos = getMouseXYRelative().toFloat();
+    for (int b = 0; b < 10; ++b)
+    {
+        if (! globalCells[(size_t) b].contains (pos))
+            continue;
+        juce::String tip = "Button " + juce::String (b);
+        for (int row = 0; row < 2; ++row)
+        {
+            const auto* def = t6::globalAt (row, b);
+            if (def == nullptr)
+                continue;
+            tip << "\n\n" << (row == 0 ? "GLOBALS once (red LED): " : "GLOBALS twice (yellow LED): ") << def->name << "\n"
+                << juce::String (t6::globalHelp (*def));
+            const auto reading = def->nrpn >= 0 ? t6::readGlobal (snap, def->nrpn) : t6::GlobalReading {};
+            if (reading.known)
+                tip << "\nNow: " << juce::String (reading.text);
+        }
+        return tip;
+    }
+    return {};
 }

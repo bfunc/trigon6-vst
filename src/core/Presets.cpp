@@ -3,6 +3,7 @@
 #include "Sysex.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 
 namespace t6
@@ -37,6 +38,53 @@ std::string programName (const std::vector<uint8_t>& data)
         if (text)
             return trimRight (s);
     }
+    return {};
+}
+
+std::string programType (const std::string& name)
+{
+    std::vector<std::string> words;
+    std::string w;
+    for (char c : name + " ")
+    {
+        if (std::isalnum ((unsigned char) c))
+            w += (char) std::tolower ((unsigned char) c);
+        else if (! w.empty())
+        {
+            words.push_back (w);
+            w.clear();
+        }
+    }
+    struct Type
+    {
+        const char* type;
+        std::vector<const char*> prefixes;  // a word that starts with one of these
+        std::vector<const char*> exact;     // a whole word
+    };
+    static const std::vector<Type> types {
+        { "Bass",    { "bass", "subs" }, { "sub" } },
+        { "Keys",    { "key", "piano", "clav", "organ", "drawbar", "rhodes", "wurli", "kord" }, { "ep" } },
+        { "Brass",   { "brass", "sax", "horn", "trumpet" }, {} },
+        { "Strings", { "string", "stwing", "violin", "cello" }, {} },
+        { "Choir",   { "choir", "chorale", "vox", "voice", "vocal", "vocoder" }, {} },
+        { "Pad",     { "pad", "atmos", "sweep", "swell", "drone" }, {} },
+        { "Lead",    { "lead", "solo" }, {} },
+        { "Pluck",   { "pluck", "koto", "biwa", "harp", "pizz" }, {} },
+        { "Bell",    { "bell", "chime", "mallet", "marimba", "bonang", "gamelan" }, {} },
+        { "Arp/Seq", { "arp", "seq" }, {} },
+        { "Drum",    { "kick", "drum", "perc", "snare", "cowbell" }, {} },
+        { "FX",      { "fx", "sci", "siren", "noise" }, {} },
+    };
+    for (const auto& t : types)
+        for (const auto& word : words)
+        {
+            for (const char* p : t.prefixes)
+                if (word.rfind (p, 0) == 0)
+                    return t.type;
+            for (const char* e : t.exact)
+                if (word == e)
+                    return t.type;
+        }
     return {};
 }
 

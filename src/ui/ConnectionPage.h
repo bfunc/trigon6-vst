@@ -6,10 +6,12 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <array>
+
 #include "PluginProcessor.h"
 #include "core/Connection.h"
 
-class ConnectionPage : public juce::Component, private juce::Timer
+class ConnectionPage : public juce::Component, public juce::TooltipClient, private juce::Timer
 {
 public:
     explicit ConnectionPage (Trigon6Processor&);
@@ -18,6 +20,7 @@ public:
     void resized() override;
 
     const t6::Report& getReport() const { return report; }
+    juce::String getTooltip() override;  // over a Globals button: both of its settings, explained
     std::function<void()> onReportChanged;
 
 private:
@@ -39,6 +42,7 @@ private:
     juce::StringArray inNames, outNames;
 
     juce::Rectangle<int> checklistArea, globalsArea;
+    std::array<juce::Rectangle<float>, 10> globalCells;  // where paintGlobals drew the buttons
     // Monitor: every NRPN the synth sends, newest first (to find what a panel control sends).
     juce::Label monitorTitle;
     juce::TextEditor monitor;

@@ -303,6 +303,8 @@ static void testSysexReplies()
 
 static void testGlobals()
 {
+    for (const auto& g : globalTable())
+        CHECK (! globalHelp (g).empty());
     std::set<std::pair<int, int>> places;
     for (const auto& gl : globalTable())
     {
@@ -509,6 +511,17 @@ static void testPresets()
     other[kNameOffset] = 200;
     CHECK (programName (other) == "");
     CHECK (programName (std::vector<uint8_t> (1024, 0)) == "");
+
+    CHECK (programType ("Bamboo Bass") == "Bass");
+    CHECK (programType ("Bass N Keys Please") == "Bass");
+    CHECK (programType ("Classic EP") == "Keys");
+    CHECK (programType ("Brassy Pad") == "Brass");
+    CHECK (programType ("Low Atmos Pad") == "Pad");
+    CHECK (programType ("Stringy Thingie") == "Strings");
+    CHECK (programType ("Seq Syn Classic") == "Arp/Seq");
+    CHECK (programType ("Keysync") == "Keys");
+    CHECK (programType ("Why Now") == "");
+    CHECK (programType ("Ripple") == "");  // "ep" only as a whole word
 
     CHECK (programLabel (0, 23) == "U 023");
     CHECK (programLabel (4, 99) == "U 499");
