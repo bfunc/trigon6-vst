@@ -247,6 +247,10 @@ static void testTable()
     CHECK (t[(size_t) indexOfNrpn (22)].max == 127);   // noise
     CHECK (t[(size_t) indexOfNrpn (28)].max == 254 && t[(size_t) indexOfNrpn (28)].center == 127);  // feedback<>drive
     CHECK (formatValue (t[(size_t) indexOfNrpn (67)], 4) == "Random");
+    // checked on the synth with the NRPN monitor (2026-11-05)
+    CHECK (formatValue (t[(size_t) indexOfNrpn (97)], 1) == "High" && formatValue (t[(size_t) indexOfNrpn (97)], 3) == "Low R");
+    CHECK (formatValue (t[(size_t) indexOfNrpn (2)], 0) == "Lo" && formatValue (t[(size_t) indexOfNrpn (2)], 5) == "+2");
+    CHECK (t[(size_t) indexOfNrpn (28)].min == 0 && t[(size_t) indexOfNrpn (28)].max == 254);
 
     // the panel shows every parameter exactly once and names nothing unknown
     std::map<std::string, int> onPanel;

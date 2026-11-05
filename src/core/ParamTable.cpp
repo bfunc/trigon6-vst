@@ -72,7 +72,7 @@ std::vector<ParamDef> build()
         // Oscillators
         pick (0, "osc1_octave", "Osc 1 Octave", S::Oscillators, octaves),
         pick (1, "osc2_octave", "Osc 2 Octave", S::Oscillators, octaves),
-        pick (2, "osc3_octave", "Osc 3 Octave", S::Oscillators, { "Lo", "-2", "-1", "0", "+1", "+2" }), // (?) order
+        pick (2, "osc3_octave", "Osc 3 Octave", S::Oscillators, { "Lo", "-2", "-1", "0", "+1", "+2" }), // 0-5, checked on the synth
         bip  (3, "osc2_pitch", "Osc 2 Pitch", S::Oscillators, 1400, 700),
         bip  (4, "osc3_pitch", "Osc 3 Pitch", S::Oscillators, 1400, 700),
         onOff (5, "osc1_saw", "Osc 1 Saw", S::Oscillators),
@@ -95,7 +95,7 @@ std::vector<ParamDef> build()
         num  (18, "osc2_volume", "Osc 2 Volume", S::Mixer, 0, 127),
         num  (19, "osc3_volume", "Osc 3 Volume", S::Mixer, 0, 127),
         num  (22, "noise", "Noise", S::Mixer, 0, 127),
-        bip  (28, "fdbk_drive", "Feedback<>Drive", S::Mixer, 254, 127), // left = feedback, right = drive
+        bip  (28, "fdbk_drive", "Feedback<>Drive", S::Mixer, 254, 127), // 0 = full feedback (left) .. 254 = full drive, checked on the synth
         num  (63, "distortion", "Distortion", S::Mixer, 0, 127),
 
         // Filter
@@ -122,7 +122,7 @@ std::vector<ParamDef> build()
         // LFO
         num  (64, "lfo_freq", "LFO Freq", S::Lfo, 0, 254),
         onOff (66, "lfo_sync", "LFO Sync", S::Lfo),
-        pick (67, "lfo_shape", "LFO Shape", S::Lfo, { "Triangle", "Saw", "Rev Saw", "Square", "Random" }),
+        pick (67, "lfo_shape", "LFO Shape", S::Lfo, { "Triangle", "Saw", "Rev Saw", "Square", "Random" }), // 0-4, checked on the synth
         num  (68, "lfo_amount", "LFO Amount", S::Lfo, 0, 255),
         onOff (69, "lfo_dest_freq1", "LFO > Freq 1", S::Lfo),
         onOff (70, "lfo_dest_freq2", "LFO > Freq 2", S::Lfo),
@@ -188,7 +188,7 @@ std::vector<ParamDef> build()
         pick (24, "glide_mode", "Glide Mode", S::Misc, { "FR", "FRA", "FT", "FTA" }),
         onOff (95, "unison_on", "Unison On", S::Misc),
         num  (96, "unison_voices", "Unison Voices", S::Misc, 0, 6),
-        pick (97, "key_mode", "Key Mode", S::Misc, { "Low", "Low R", "High", "High R", "Last", "Last R" }), // (?) order
+        pick (97, "key_mode", "Key Mode", S::Misc, { "Low", "High", "Last", "Low R", "High R", "Last R" }), // 0-5 as the synth shows them: Lo Hi LAS LoR HiR LAr
         num  (26, "pitch_wheel_range", "Pitch Wheel Range", S::Misc, 0, 12),
     };
 }
