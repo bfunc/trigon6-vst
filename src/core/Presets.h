@@ -11,7 +11,7 @@
 namespace t6
 {
 
-// To confirm on the unit: 10 banks of 100, banks 0-4 user (U 000-499), 5-9 factory (F 000-499).
+// 10 banks of 100 (all answer on a Trigon-6): banks 0-4 user (U 000-499), 5-9 factory (F 000-499).
 constexpr int kBankCount = 10;
 constexpr int kProgramsPerBank = 100;
 constexpr int kUserBanks = 5;
