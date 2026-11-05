@@ -417,7 +417,6 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
     {
         state.globalNrpn[ev->param] = ev->value;
         state.globalNrpnMs[ev->param] = t;
-        return;
     }
     ++inSeq;
     inEvents[inSeq % inEvents.size()] = { inSeq, m.getChannel(), ev->param, ev->value };

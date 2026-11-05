@@ -39,6 +39,12 @@ private:
     juce::StringArray inNames, outNames;
 
     juce::Rectangle<int> checklistArea, globalsArea;
+    // Monitor: every NRPN the synth sends, newest first (to find what a panel control sends).
+    juce::Label monitorTitle;
+    juce::TextEditor monitor;
+    juce::TextButton clearMonitor { "Clear" };
+    juce::StringArray monitorLines;
+    uint32_t monitorSeen = 0;
     int ticks = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConnectionPage)

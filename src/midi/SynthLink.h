@@ -53,7 +53,7 @@ public:
 
     t6::LinkSnapshot snapshot (int pluginChannel) const;
 
-    // NRPN the synth sent (a knob turned on the panel, with Param Xmit = NR), numbered in arrival order.
+    // NRPN the synth sent (a knob turned on the panel, with Param Xmit = NR; globals too), numbered in arrival order.
     // Every plugin copy reads them on its own: pass the last seq it saw, get the newer events and the new
     // last seq. Echoes of what the plugin sent are not included.
     struct InEvent
