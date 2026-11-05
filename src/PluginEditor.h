@@ -22,9 +22,10 @@ private:
     Trigon6Processor& proc;
     juce::LookAndFeel_V4 lnf;
     juce::TooltipWindow tooltips { this, 600 };
-    juce::Label title, channelLabel, status;
+    juce::Label title, channelLabel, status, soundStatus;
     juce::ComboBox channel;
     juce::TextButton sendAll { "Send all" };
+    juce::TextButton getSound { "Get sound" };
     class Tabs;
     std::unique_ptr<Tabs> tabs;
 

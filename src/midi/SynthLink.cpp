@@ -332,10 +332,18 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
                     noteOther();
                 break;
             case t6::SysexKind::EditBufferDump:
+            {
+                auto data = t6::parseProgramDump (d, n, id);
                 state.editBufferSize = n + 2;
-                state.editBufferOk = t6::parseProgramDump (d, n, id).has_value();
+                state.editBufferOk = data.has_value();
                 state.editBufferMs = t;
+                if (data)
+                {
+                    editData = std::move (*data);
+                    ++editSeq;
+                }
                 break;
+            }
             default: noteOther(); break;
         }
         return;
@@ -390,6 +398,20 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
     }
     ++inSeq;
     inEvents[inSeq % inEvents.size()] = { inSeq, m.getChannel(), ev->param, ev->value };
+}
+
+void SynthLink::requestEditBuffer() { sendSysex (t6::requestEditBuffer ((uint8_t) sysexId.load())); }
+
+uint32_t SynthLink::editBufferSeq() const
+{
+    const juce::ScopedLock sl (stateLock);
+    return editSeq;
+}
+
+std::vector<uint8_t> SynthLink::editBuffer() const
+{
+    const juce::ScopedLock sl (stateLock);
+    return editData;
 }
 
 uint32_t SynthLink::incomingSeq() const

@@ -62,6 +62,11 @@ public:
     uint32_t readIncoming (uint32_t afterSeq, std::vector<InEvent>& out) const;
     uint32_t incomingSeq() const;
 
+    // The current sound: ask for the edit buffer; each good dump that arrives bumps editBufferSeq.
+    void requestEditBuffer();
+    uint32_t editBufferSeq() const;
+    std::vector<uint8_t> editBuffer() const;  // the 1024 unpacked bytes of the last good dump
+
 private:
     SynthLink();
     void timerCallback() override;
@@ -102,6 +107,8 @@ private:
 
     std::array<InEvent, 256> inEvents;  // ring, guarded by stateLock
     uint32_t inSeq = 0;                 // seq of the newest event, guarded by stateLock
+    std::vector<uint8_t> editData;      // guarded by stateLock
+    uint32_t editSeq = 0;               // guarded by stateLock
 
     int probeStep = -1;  // message thread: next request of a running Check
     int ticks = 0;

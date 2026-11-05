@@ -257,6 +257,13 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     sendAll.onClick = [this] { proc.requestSendAll(); };
     addAndMakeVisible (sendAll);
 
+    getSound.setTooltip ("Read the synth's current sound into the plugin (sends nothing that changes the sound)");
+    getSound.onClick = [this] { proc.requestGetSound(); };
+    addAndMakeVisible (getSound);
+    soundStatus.setColour (juce::Label::textColourId, colours::dim);
+    soundStatus.setMinimumHorizontalScale (0.6f);
+    addAndMakeVisible (soundStatus);
+
     status.setColour (juce::Label::textColourId, colours::dim);
     addAndMakeVisible (status);
 
@@ -298,9 +305,12 @@ void Trigon6Editor::resized()
     title.setBounds (bar.removeFromLeft (240));
     status.setBounds (bar.removeFromRight (230));
     sendAll.setBounds (bar.removeFromRight (100));
+    bar.removeFromRight (8);
+    getSound.setBounds (bar.removeFromRight (100));
     bar.removeFromRight (16);
     channel.setBounds (bar.removeFromRight (70));
     channelLabel.setBounds (bar.removeFromRight (110));
+    soundStatus.setBounds (bar);
 
     tabs->setBounds (r);
 }
@@ -312,4 +322,7 @@ void Trigon6Editor::timerCallback()
     status.setText ("NRPN sent: " + juce::String (proc.getSentCount())
                         + (proc.isHostOutput() ? "  (host)" : proc.getLink().isOutputOpen() ? "  (port)" : "  (no port)"),
                     juce::dontSendNotification);
+    const auto s = proc.getSoundStatus();
+    soundStatus.setText (s, juce::dontSendNotification);
+    soundStatus.setTooltip (s);
 }

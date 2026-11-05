@@ -75,6 +75,20 @@ Trigon6Processor::~Trigon6Processor()
 
 void Trigon6Processor::timerCallback()
 {
+    if (soundPending)
+    {
+        if (link->editBufferSeq() != soundSeq)
+        {
+            soundPending = false;
+            applySound (link->editBuffer());
+        }
+        else if (juce::Time::getMillisecondCounterHiRes() - soundAskedMs > 3000)
+        {
+            soundPending = false;
+            soundStatus = "No sound came back. Check the Connection tab (MIDI SysEx = USB).";
+        }
+    }
+
     std::vector<SynthLink::InEvent> events;
     incomingSeen = link->readIncoming (incomingSeen, events);
     if (events.empty())
@@ -89,17 +103,59 @@ void Trigon6Processor::timerCallback()
         if (e.channel != ch)
             continue;
         const int i = t6::indexOfNrpn (e.param);
-        if (i < 0)
-            continue;
-        const auto& p = table[(size_t) i];
-        const int v = juce::jlimit (p.min, p.max, e.value);
-        queue.markSynced ((size_t) i, v);
-        if (auto* param = apvts.getParameter (p.id))
-        {
-            const float plain = (float) (p.kind == t6::Kind::Choice ? v - p.min : v);
-            param->setValueNotifyingHost (param->convertTo0to1 (plain));
-        }
+        if (i >= 0)
+            applyFromSynth ((size_t) i, juce::jlimit (table[(size_t) i].min, table[(size_t) i].max, e.value));
     }
+}
+
+void Trigon6Processor::applyFromSynth (size_t i, int v)
+{
+    const auto& p = t6::paramTable()[i];
+    queue.markSynced (i, v);
+    if (auto* param = apvts.getParameter (p.id))
+    {
+        const float plain = (float) (p.kind == t6::Kind::Choice ? v - p.min : v);
+        param->setValueNotifyingHost (param->convertTo0to1 (plain));
+    }
+}
+
+void Trigon6Processor::requestGetSound()
+{
+    soundSeq = link->editBufferSeq();
+    soundPending = true;
+    soundAskedMs = juce::Time::getMillisecondCounterHiRes();
+    soundStatus = "Asking the synth for its sound...";
+    link->requestEditBuffer();
+}
+
+void Trigon6Processor::applySound (const std::vector<uint8_t>& data)
+{
+    const auto& table = t6::paramTable();
+    int set = 0;
+    juce::StringArray outOfRange, skipped;
+    const juce::ScopedLock sl (queueLock);
+    for (size_t i = 0; i < table.size(); ++i)
+    {
+        const auto& p = table[i];
+        if (p.nrpn < 0 || (size_t) p.nrpn >= data.size() || p.max > 255)
+        {
+            skipped.add (p.name);
+            continue;
+        }
+        const int v = data[(size_t) p.nrpn];
+        if (v < p.min || v > p.max)
+        {
+            outOfRange.add (juce::String (p.name) + " " + juce::String (v));
+            continue;
+        }
+        applyFromSynth (i, v);
+        ++set;
+    }
+    soundStatus = "Got sound: " + juce::String (set) + " set";
+    if (! outOfRange.isEmpty())
+        soundStatus << "; " << outOfRange.size() << " impossible (" << outOfRange.joinIntoString (", ") << ")";
+    if (! skipped.isEmpty())
+        soundStatus << "; not read: " << skipped.joinIntoString (", ");
 }
 
 void Trigon6Processor::setHostOutput (bool host)
