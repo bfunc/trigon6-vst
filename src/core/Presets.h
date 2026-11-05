@@ -16,9 +16,9 @@ constexpr int kBankCount = 10;
 constexpr int kProgramsPerBank = 100;
 constexpr int kUserBanks = 5;
 
-// The name inside the 1024 unpacked program bytes. 107..126 is the Prophet-6 position, a guess for the
-// Trigon-6; when those bytes are not text, the longest run of printable characters is taken instead.
-constexpr size_t kNameOffset = 107;
+// The name inside the 1024 unpacked program bytes: 20 characters at 116, padded with spaces
+// (found in 1000 program dumps from a Trigon-6, 2026-11-05).
+constexpr size_t kNameOffset = 116;
 constexpr size_t kNameLength = 20;
 std::string programName (const std::vector<uint8_t>& data);
 

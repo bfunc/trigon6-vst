@@ -80,8 +80,7 @@ PresetsPage::PresetsPage (Trigon6Processor& p)
     status.setColour (juce::Label::textColourId, theme::text);
     addAndMakeVisible (status);
     note.setColour (juce::Label::textColourId, theme::dim);
-    note.setText ("Load switches the synth's current sound; nothing here writes into the synth's memory. "
-                  "Names are read from where the Prophet-6 keeps them (a guess): check that they match the synth.",
+    note.setText ("Load switches the synth's current sound; nothing here writes into the synth's memory.",
                   juce::dontSendNotification);
     addAndMakeVisible (note);
 

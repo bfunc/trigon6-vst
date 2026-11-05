@@ -34,27 +34,10 @@ std::string programName (const std::vector<uint8_t>& data)
             text = printable (c);
             s += (char) c;
         }
-        s = trimRight (s);
-        if (text && s.size() >= 1)
-            return s;
+        if (text)
+            return trimRight (s);
     }
-    // Not text at the guessed place: the longest printable run of 3 or more.
-    size_t bestStart = 0, bestLen = 0;
-    for (size_t i = 0; i < data.size();)
-    {
-        size_t j = i;
-        while (j < data.size() && printable (data[j]))
-            ++j;
-        if (j - i > bestLen)
-        {
-            bestStart = i;
-            bestLen = j - i;
-        }
-        i = j + 1;
-    }
-    if (bestLen < 3)
-        return {};
-    return trimRight (std::string (data.begin() + (long) bestStart, data.begin() + (long) (bestStart + std::min (bestLen, kNameLength))));
+    return {};
 }
 
 std::string programLabel (int bank, int program)

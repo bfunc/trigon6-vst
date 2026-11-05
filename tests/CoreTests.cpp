@@ -499,12 +499,11 @@ static void testPresets()
     for (size_t i = 0; i < kNameLength; ++i)
         data[kNameOffset + i] = (uint8_t) (i < name.size() ? name[i] : ' ');
     CHECK (programName (data) == "Bright Bass");
-    // elsewhere: the longest printable run
-    std::vector<uint8_t> other (1024, 200);
-    const std::string n2 = "Underwater Memory";
-    for (size_t i = 0; i < n2.size(); ++i)
-        other[300 + i] = (uint8_t) n2[i];
-    CHECK (programName (other) == "Underwater Memory");
+    CHECK (kNameOffset == 116);
+    // not text there: no name, even when other bytes look like text (sequencer notes are 60 = '<')
+    std::vector<uint8_t> other (1024, 60);
+    other[kNameOffset] = 200;
+    CHECK (programName (other) == "");
     CHECK (programName (std::vector<uint8_t> (1024, 0)) == "");
 
     CHECK (programLabel (0, 23) == "U 023");
