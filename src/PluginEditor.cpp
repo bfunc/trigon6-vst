@@ -3,6 +3,7 @@
 #include "core/ParamTable.h"
 #include "ui/ConnectionPage.h"
 #include "ui/PanelLayout.h"
+#include "ui/PresetsPage.h"
 #include "ui/Theme.h"
 
 #include <cstring>
@@ -274,6 +275,7 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     auto* connection = new ConnectionPage (proc);
     tabs->addTab ("Connection", colours::section, connection, true);
     tabs->addTab ("Panel", colours::section, new PanelPage (proc.apvts), true);
+    tabs->addTab ("Presets", colours::section, new PresetsPage (proc), true);
     tabs->show (connection->getReport().allOk ? 1 : 0);
     // Just after opening (the standalone app checks the synth on start), move to the panel once all is green.
     const auto openedMs = juce::Time::getMillisecondCounter();

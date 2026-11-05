@@ -340,10 +340,23 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
                 if (data)
                 {
                     editData = std::move (*data);
+                    editSysex.assign (1, 0xF0);
+                    editSysex.insert (editSysex.end(), d, d + n);
+                    editSysex.push_back (0xF7);
                     ++editSeq;
                 }
                 break;
             }
+            case t6::SysexKind::ProgramDump:
+                if (auto p = t6::parseStoredProgram (d, n, id))
+                {
+                    programsIn.push_back ({ ++programInSeq, std::move (*p) });
+                    while (programsIn.size() > 64)
+                        programsIn.pop_front();
+                }
+                else
+                    noteOther();
+                break;
             default: noteOther(); break;
         }
         return;
@@ -351,6 +364,16 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
 
     if (m.isActiveSense() || m.isMidiClock())
         return;  // say nothing about the settings; and clock would flood the counters
+
+    if (m.isProgramChange())
+    {
+        const juce::ScopedLock sl (stateLock);
+        state.lastAnyInMs = t;
+        pcIn = { pcIn.seq + 1, m.getChannel(), bankIn[(size_t) (m.getChannel() - 1)], m.getProgramChangeNumber() };
+        return;
+    }
+    if (m.isController() && (m.getControllerNumber() == 0 || m.getControllerNumber() == 32))
+        bankIn[(size_t) (m.getChannel() - 1)] = m.getControllerValue();
 
     std::optional<t6::NrpnEvent> ev;
     bool paramCc = false;
@@ -401,6 +424,45 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
 }
 
 void SynthLink::requestEditBuffer() { sendSysex (t6::requestEditBuffer ((uint8_t) sysexId.load())); }
+
+std::vector<uint8_t> SynthLink::editBufferSysex() const
+{
+    const juce::ScopedLock sl (stateLock);
+    return editSysex;
+}
+
+void SynthLink::requestProgram (int bank, int program)
+{
+    sendSysex (t6::requestProgram (bank, program, (uint8_t) sysexId.load()));
+}
+
+uint32_t SynthLink::readPrograms (uint32_t afterSeq, std::vector<ProgramIn>& out) const
+{
+    const juce::ScopedLock sl (stateLock);
+    for (const auto& p : programsIn)
+        if (p.seq > afterSeq)
+            out.push_back (p);
+    return programInSeq;
+}
+
+uint32_t SynthLink::programSeq() const
+{
+    const juce::ScopedLock sl (stateLock);
+    return programInSeq;
+}
+
+void SynthLink::sendProgramChange (int channel, int bank, int program)
+{
+    sendMessage (juce::MidiMessage::controllerEvent (channel, 0, 0));
+    sendMessage (juce::MidiMessage::controllerEvent (channel, 32, bank));
+    sendMessage (juce::MidiMessage::programChange (channel, program));
+}
+
+SynthLink::ProgramChangeIn SynthLink::lastProgramChange() const
+{
+    const juce::ScopedLock sl (stateLock);
+    return pcIn;
+}
 
 uint32_t SynthLink::editBufferSeq() const
 {
