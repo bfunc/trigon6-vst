@@ -58,8 +58,9 @@ Notes on the manuals:
   HP filter). Version 1.1 has the Trigon-6 table: NRPN 0–106, Osc Pitch 0–1400, Cutoff 0–164 and so on.
 - Some names in 1.1 are misprinted and are corrected in the plugin: NRPN 20 "Osc 1 Sync" is *Sync Osc 2*, and NRPN 21
   "Osc 1 Keyboard" is *Osc 3 Keyboard*.
-- The manual's table has no NRPN for **Feedback◂▸Drive**, **Noise** or **LFO Shape**. The panel shows these as
-  "NRPN ?". Stage 4 will find their numbers from what the synth sends.
+- The manual's table has no NRPN for **Noise**, **Feedback◂▸Drive** or **LFO Shape**. Their numbers were read from
+  what the synth sends: Noise = 22 (0–127), Feedback◂▸Drive = 28 (0–254, centre 127, left = feedback, right = drive),
+  LFO Shape = 67 (0–4: Triangle, Saw, Reverse Saw, Square, Random, in the manual's order).
 - NRPN 63 "Distortion" is the Distortion knob in the Master section.
 - The manual does not number every list. These value orders are guesses to check on the synth: Osc 3 Octave (Lo first?)
   and Key Mode.
@@ -102,7 +103,7 @@ tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, table and
 2. MIDI output: the plugin's MIDI out (FL) or a hardware/USB port picked in the plugin (`juce::MidiOutput`).
 3. Panel polish.
 4. Feedback: NRPNs from the synth update the plugin without being sent back. A monitor shows unknown NRPN numbers
-   (Feedback/Drive, Noise, LFO Shape).
+   (for parameters still missing from the table).
 5. Get patch: request the edit buffer and unpack it. An explore mode writes hex dumps and compares two of them, to find
    where each parameter sits in the 1024 bytes.
 

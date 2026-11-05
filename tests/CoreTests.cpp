@@ -208,7 +208,7 @@ static void testTable()
             CHECK (p.min == 0 && p.max == 1);
         CHECK (indexOfNrpn (p.nrpn) >= 0 && t[(size_t) indexOfNrpn (p.nrpn)].nrpn == p.nrpn);
     }
-    CHECK (indexOfNrpn (22) == -1);
+    CHECK (indexOfNrpn (37) == -1);  // a gap in the numbering
 
     // ranges from the manual (1.1) that the plugin must get right
     CHECK (t[(size_t) indexOfNrpn (29)].max == 164);   // cutoff
@@ -218,6 +218,10 @@ static void testTable()
     CHECK (formatValue (t[(size_t) indexOfNrpn (36)], 0) == "-127");
     CHECK (formatValue (t[(size_t) indexOfNrpn (36)], 254) == "+127");
     CHECK (formatValue (t[(size_t) indexOfNrpn (50)], 13) == "Spring");
+    // found from the synth's own NRPN output
+    CHECK (t[(size_t) indexOfNrpn (22)].max == 127);   // noise
+    CHECK (t[(size_t) indexOfNrpn (28)].max == 254 && t[(size_t) indexOfNrpn (28)].center == 127);  // feedback<>drive
+    CHECK (formatValue (t[(size_t) indexOfNrpn (67)], 4) == "Random");
 
     // the panel shows every parameter exactly once and names nothing unknown
     std::map<std::string, int> onPanel;

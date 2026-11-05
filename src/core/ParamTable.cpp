@@ -56,7 +56,8 @@ std::vector<ParamDef> build()
     // Source: Trigon-6 User's Guide 1.1, Appendix B, "Program Parameter Data".
     // (Manual 1.2 prints the Prophet-6 table there by mistake: 2 oscillators, sub osc, HP filter.)
     // Choice orders follow the manual's lists; marked (?) where the manual does not give the numbering.
-    // Missing from the manual's table (to find via incoming NRPN, stage 4): Feedback<>Drive, Noise, LFO Shape.
+    // Missing from the manual's table, found from what the synth sends (Param Xmit = NR):
+    // 22 Noise, 28 Feedback<>Drive, 67 LFO Shape.
     // Left out on purpose: 106 Sequencer Rec On (a mode switch, not a sound setting), name, sequencer steps.
     return {
         // Oscillators
@@ -84,6 +85,8 @@ std::vector<ParamDef> build()
         num  (17, "osc1_volume", "Osc 1 Volume", S::Mixer, 0, 127),
         num  (18, "osc2_volume", "Osc 2 Volume", S::Mixer, 0, 127),
         num  (19, "osc3_volume", "Osc 3 Volume", S::Mixer, 0, 127),
+        num  (22, "noise", "Noise", S::Mixer, 0, 127),
+        bip  (28, "fdbk_drive", "Feedback<>Drive", S::Mixer, 254, 127), // left = feedback, right = drive
         num  (63, "distortion", "Distortion", S::Mixer, 0, 127),
 
         // Filter
@@ -110,6 +113,7 @@ std::vector<ParamDef> build()
         // LFO
         num  (64, "lfo_freq", "LFO Freq", S::Lfo, 0, 254),
         onOff (66, "lfo_sync", "LFO Sync", S::Lfo),
+        pick (67, "lfo_shape", "LFO Shape", S::Lfo, { "Triangle", "Saw", "Rev Saw", "Square", "Random" }),
         num  (68, "lfo_amount", "LFO Amount", S::Lfo, 0, 255),
         onOff (69, "lfo_dest_freq1", "LFO > Freq 1", S::Lfo),
         onOff (70, "lfo_dest_freq2", "LFO > Freq 2", S::Lfo),
