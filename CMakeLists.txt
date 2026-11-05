@@ -28,6 +28,7 @@ add_library(t6_core STATIC
     src/core/SendQueue.cpp
     src/core/Globals.cpp
     src/core/Connection.cpp
+    src/core/PortMatch.cpp
     src/ui/PanelLayout.cpp)
 target_include_directories(t6_core PUBLIC src)
 set_target_properties(t6_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

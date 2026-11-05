@@ -31,24 +31,29 @@ FL Studio scans, then rescan plugins in FL.
 The plugin opens on **Connection** unless the synth is fully connected (then it opens on **Panel**).
 
 - **Send NRPN**: *Direct to the synth's port* (the default in the standalone app) or *Through the host* (the default
-  in a DAW). Input and output ports are picked by name; *Auto* takes the first port named "Trigon 6".
-  The ports are reopened by themselves when the synth is switched on or plugged in.
-- **Check** asks the synth who it is (device inquiry) and requests its global settings and its current sound (SysEx).
-  It changes nothing on the synth. It also runs by itself when the ports open.
-- **Status**: one line per check, green / yellow / red / grey, with what to fix: ports found and open, the synth
-  answers, both dumps arrive, and the globals the connection needs (MIDI Out, MIDI SysEx, Param Rcv, Param Xmit,
-  MIDI Channel). The last line shows knob moves arriving from the synth.
-- **Globals map**: the synth's labels above the program buttons are hard to read, so the page draws both rows of
-  buttons 0–9 with each setting's name, its current value and the value it needs.
+  in a DAW). Ports are picked by name; *Auto* takes the first port named "Trigon 6". A saved name still finds its
+  port when Windows renames it ("2- Trigon 6 Module", "Trigon 6 Module [0]"). Ports reopen by themselves when the
+  synth is switched on or plugged in. All plugin copies in one program share one connection.
+- **Verdict**: one line with the most likely cause and the one thing to do, e.g. which Globals button to press.
+- **Ladder**: ports, synth to computer, computer to synth, SysEx, knob moves (Param Xmit), Param Rcv, MIDI channel.
+  Each step needs the ones above it; a step that can't be judged yet is dimmed. Only the first failing step shows
+  its fix, so one cause doesn't light up the whole list.
+- **Tests**: *Check* asks the synth who it is and requests its global settings and current sound (changes nothing).
+  *Play test note* plays middle C; you answer *I heard it* / *No sound*. That tells "nothing reaches the synth" from
+  "SysEx is off". *Use channel N* appears when the synth's channel differs from the plugin's.
+- **Also note**: a MIDI loop (our NRPN come straight back), MIDI Clock = In (arp and sequencer wait for clock), Local
+  Ctrl = Off, a shared connection.
+- **Globals map**: both rows of the synth's buttons 0–9 with each setting's name, current value and the value it
+  needs. A white frame marks the button the verdict is about.
 
-Windows gives a MIDI port to one program at a time. If FL Studio (or another app) has the Trigon ports open, the
-page says the port is busy.
+Settings are known from three sources, in this order: what the synth sends when you change a global (Param Xmit
+1029, Param Rcv 1030, MIDI SysEx 1032, MIDI Out 1033; values in the panel's order, e.g. Param Xmit 0 Off, 1 CC,
+2 NR), what the traffic proves (knob moves over USB prove MIDI Out = USB and Param Xmit = NR; a dump proves SysEx =
+USB), and the global dump. The dump's order is not checked yet (assumed NRPN order), so a value seen only there is
+marked "?", never overrides proof, and a mismatch is only a warning. The page shows the dump's raw values.
 
-Global values come from two places: the synth sends a global as NRPN when you change it on the panel (checked on a
-Trigon-6: Param Xmit 1029, Param Rcv 1030, MIDI SysEx 1032, MIDI Out 1033, with values in the panel's order, e.g.
-Param Xmit 0 Off, 1 CC, 2 NR), and the global dump. The dump's order is not checked yet (assumed NRPN order), so a
-value seen only there is marked "?" and a mismatch is only a warning. The page shows the dump's raw values to check
-it against the synth.
+Windows gives a MIDI port to one program at a time. If FL Studio (or the standalone app, or another program) has the
+Trigon ports open, the page says the port is busy.
 
 ## FL Studio
 
@@ -114,13 +119,14 @@ src/core/Packed.*       DSI "packed MS bit" (1024 bytes <-> 1171 MIDI bytes)
 src/core/Sysex.*        requests (edit buffer, program, device inquiry) and the program dump parser
 src/core/SendQueue.*    what to send when: only changes, rate-limited
 src/core/Globals.*      the synth's global settings: button row/number, NRPN, value names, what the plugin needs
-src/core/Connection.*   the connection checklist, from a snapshot of what the MIDI layer saw
+src/core/Connection.*   the diagnosis: ladder, verdict, warnings, from a snapshot of what the MIDI layer saw
+src/core/PortMatch.*    finding a port by name when Windows renames it
 src/midi/SynthLink.*    JUCE: opens the synth's ports, reconnects, sends NRPN/SysEx, records replies
 src/ui/PanelLayout.*    where each parameter sits on the panel
 src/PluginProcessor.*   JUCE: parameters (APVTS) from the table, NRPN out in processBlock
 src/PluginEditor.*      JUCE: top bar, tabs, the panel
 src/ui/ConnectionPage.* JUCE: the Connection page
-tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, globals, connection rules, table and layout
+tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, globals, diagnosis rules, port names, table and layout
 ```
 
 `src/core` and `src/ui/PanelLayout` do not use JUCE, so the tests build in seconds.

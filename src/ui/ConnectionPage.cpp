@@ -89,6 +89,19 @@ ConnectionPage::ConnectionPage (Trigon6Processor& p) : proc (p)
     check.onClick = [this] { proc.getLink().probe(); };
     addAndMakeVisible (check);
 
+    playNote.setTooltip ("Play middle C for a moment. If you hear it, MIDI reaches the synth (whatever Param Rcv and SysEx are).");
+    playNote.onClick = [this] { proc.getLink().playTestNote (proc.getMidiChannel()); };
+    heard.onClick = [this] { proc.getLink().answerNoteTest (true); };
+    notHeard.onClick = [this] { proc.getLink().answerNoteTest (false); };
+    useChannel.onClick = [this]
+    {
+        if (report.suggestChannel > 0)
+            proc.setMidiChannel (report.suggestChannel);
+    };
+    for (auto* b : { &playNote, &heard, &notHeard, &useChannel })
+        addChildComponent (*b);
+    playNote.setVisible (true);
+
     timerCallback();
     startTimerHz (5);
 }
@@ -122,8 +135,21 @@ void ConnectionPage::timerCallback()
     report = t6::evaluate (snap);
     if (was != report.allOk && onReportChanged)
         onReportChanged();
+    updateButtons();
     repaint (checklistArea);
     repaint (globalsArea);
+}
+
+void ConnectionPage::updateButtons()
+{
+    const bool waiting = snap.noteTest == t6::NoteTest::Waiting;
+    heard.setVisible (waiting);
+    notHeard.setVisible (waiting);
+    playNote.setEnabled (snap.hostOutput || snap.outOpen);
+    playNote.setColour (juce::TextButton::buttonColourId,
+                        report.offerNoteTest && ! waiting ? theme::warn.darker (0.4f) : getLookAndFeel().findColour (juce::TextButton::buttonColourId));
+    useChannel.setVisible (report.suggestChannel > 0);
+    useChannel.setButtonText ("Use channel " + juce::String (report.suggestChannel));
 }
 
 void ConnectionPage::resized()
@@ -136,8 +162,18 @@ void ConnectionPage::resized()
     inPort.setBounds (bar.removeFromLeft (220).reduced (4, 0));
     outPortLabel.setBounds (bar.removeFromLeft (90));
     outPort.setBounds (bar.removeFromLeft (220).reduced (4, 0));
-    bar.removeFromLeft (12);
-    check.setBounds (bar.removeFromLeft (100));
+
+    r.removeFromTop (8);
+    auto tests = r.removeFromTop (30);
+    check.setBounds (tests.removeFromLeft (100));
+    tests.removeFromLeft (8);
+    playNote.setBounds (tests.removeFromLeft (130));
+    tests.removeFromLeft (8);
+    heard.setBounds (tests.removeFromLeft (100));
+    tests.removeFromLeft (4);
+    notHeard.setBounds (tests.removeFromLeft (100));
+    tests.removeFromLeft (16);
+    useChannel.setBounds (tests.removeFromLeft (140));
 
     r.removeFromTop (12);
     checklistArea = r.removeFromLeft ((int) (r.getWidth() * 0.42f));
@@ -161,23 +197,69 @@ void ConnectionPage::paintChecklist (juce::Graphics& g, juce::Rectangle<int> are
     g.drawRoundedRectangle (box, 6.0f, 1.0f);
 
     auto r = area.reduced (12);
-    g.setFont (juce::FontOptions (16.0f, juce::Font::bold));
-    g.setColour (report.allOk ? theme::ok : theme::text);
-    g.drawText (report.allOk ? "CONNECTED" : "CONNECTION STATUS", r.removeFromTop (24), juce::Justification::centredLeft);
-    r.removeFromTop (6);
 
-    for (const auto& item : report.items)
+    // Verdict: the one thing to do now
     {
+        auto tl = layoutText (report.verdict, report.verdictFix, (float) r.getWidth() - 20.0f);
+        const int h = (int) std::ceil (tl.getHeight()) + 16;
+        auto card = r.removeFromTop (h);
+        g.setColour (theme::background);
+        g.fillRoundedRectangle (card.toFloat(), 5.0f);
+        g.setColour (colourOf (report.verdictHealth));
+        g.fillRoundedRectangle (card.removeFromLeft (6).toFloat(), 3.0f);
+        tl.draw (g, card.reduced (8).toFloat().withTrimmedLeft (4.0f));
+    }
+    r.removeFromTop (10);
+
+    // The ladder: the first failing step shows its fix; blocked steps are dimmed
+    bool fixShown = false;
+    int n = 0;
+    auto drawItem = [&] (const t6::CheckItem& item, const juce::String& prefix)
+    {
+        const bool showFix = ! fixShown && item.health != t6::Health::Ok && ! item.fix.empty() && ! item.blocked;
+        juce::String detail = item.detail;
+        if (showFix)
+        {
+            detail << "
+> " << item.fix;
+            fixShown = true;
+        }
+        if (! item.required && ! item.blocked)
+            detail << (item.health == t6::Health::Ok ? "" : "  (optional)");
         const float textX = (float) r.getX() + 22.0f;
         const float textW = (float) r.getWidth() - 22.0f;
-        auto tl = layoutText (item.title, item.detail, textW);
+        auto tl = layoutText (prefix + item.title, detail, textW);
         const float h = tl.getHeight();
         if ((float) r.getHeight() < h)
-            break;
+            return false;
+        if (item.blocked)
+            g.beginTransparencyLayer (0.45f);
         g.setColour (colourOf (item.health));
         g.fillEllipse ((float) r.getX() + 2.0f, (float) r.getY() + 4.0f, 11.0f, 11.0f);
         tl.draw (g, { textX, (float) r.getY(), textW, h });
-        r.removeFromTop ((int) std::ceil (h) + 8);
+        if (item.blocked)
+            g.endTransparencyLayer();
+        r.removeFromTop ((int) std::ceil (h) + 7);
+        return true;
+    };
+
+    for (const auto& item : report.steps)
+        if (! drawItem (item, juce::String (++n) + ". "))
+            return;
+
+    if (! report.warnings.empty())
+    {
+        r.removeFromTop (6);
+        g.setColour (theme::text);
+        g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+        g.drawText ("ALSO NOTE", r.removeFromTop (20), juce::Justification::centredLeft);
+        fixShown = false;
+        for (const auto& w : report.warnings)
+        {
+            fixShown = false;  // every warning shows its own advice
+            if (! drawItem (w, ""))
+                return;
+        }
     }
 }
 
@@ -211,7 +293,7 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
         footer << "Global dump received " << juce::String ((snap.nowMs - snap.globalsMs) / 1000.0, 0) << " s ago. Raw values: ";
         for (size_t i = 0; i < snap.globalsDump.size(); ++i)
             footer << snap.globalsDump[i] << (i + 1 < snap.globalsDump.size() ? " " : "");
-        footer << ".  Values marked ? come only from the dump, whose order is not checked yet.";
+        footer << ".  Values marked ? come only from the dump, whose order is not checked yet. A white frame marks the button to press now.";
     }
     else
         footer = "No global dump yet (press Check; needs MIDI SysEx = USB). Values also appear when you change a setting on the synth.";
@@ -242,10 +324,11 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
             const bool required = def != nullptr && t6::isRequiredGlobal (*def);
             const auto health = def != nullptr ? t6::globalHealth (snap, *def) : t6::Health::Unknown;
 
-            g.setColour (theme::background);
+            const bool highlighted = row == report.highlightRow && b == report.highlightButton;
+            g.setColour (highlighted ? theme::section.brighter (0.25f) : theme::background);
             g.fillRoundedRectangle (c, 5.0f);
-            g.setColour (required ? colourOf (health) : theme::border);
-            g.drawRoundedRectangle (c, 5.0f, required ? 2.5f : 1.0f);
+            g.setColour (highlighted ? theme::text : required ? colourOf (health) : theme::border);
+            g.drawRoundedRectangle (c, 5.0f, highlighted ? 4.0f : required ? 2.5f : 1.0f);
 
             auto inner = c.reduced (4.0f);
             g.setColour (theme::text);
@@ -261,8 +344,8 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
             g.setFont (juce::FontOptions (13.0f));
             g.setColour (reading.known ? (required ? colourOf (health) : theme::text) : theme::dim);
             const juce::String now = reading.known
-                                         ? juce::String (t6::globalValueName (*def, reading.raw))
-                                               + (reading.fromDump && ! t6::kDumpOrderVerified ? " ?" : "")
+                                         ? juce::String (reading.text)
+                                               + (reading.source == t6::Source::Dump && ! t6::kDumpOrderVerified ? " ?" : "")
                                          : juce::String ("-");
             g.drawFittedText ("now: " + now, inner.removeFromTop (18.0f).toNearestInt(), juce::Justification::centred, 1);
 

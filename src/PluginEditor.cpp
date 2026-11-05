@@ -307,6 +307,8 @@ void Trigon6Editor::resized()
 
 void Trigon6Editor::timerCallback()
 {
+    if (channel.getSelectedId() != proc.getMidiChannel())  // "Use channel N" on the Connection page
+        channel.setSelectedId (proc.getMidiChannel(), juce::dontSendNotification);
     status.setText ("NRPN sent: " + juce::String (proc.getSentCount())
                         + (proc.isHostOutput() ? "  (host)" : proc.getLink().isOutputOpen() ? "  (port)" : "  (no port)"),
                     juce::dontSendNotification);

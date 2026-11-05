@@ -47,8 +47,8 @@ public:
     void requestSendAll() { sendAllRequested = true; }
     int getSentCount() const { return sentCount.load(); }
 
-    SynthLink& getLink() { return link; }
-    bool isHostOutput() const { return link.isHostOutput(); }
+    SynthLink& getLink() { return *link; }
+    bool isHostOutput() const { return link->isHostOutput(); }
     void setHostOutput (bool host);
     void setPortChoice (const juce::String& inputName, const juce::String& outputName);
 
@@ -76,7 +76,7 @@ private:
     std::vector<std::atomic<float>*> raw;  // one per paramTable() entry, same order
     t6::SendQueue queue;
     juce::CriticalSection queueLock;  // the audio thread only try-locks it
-    SynthLink link;
+    std::shared_ptr<SynthLink> link;  // shared by every plugin copy in this program
     Pump pump { *this };
     std::atomic<int> midiChannel { 1 };
     std::atomic<bool> sendAllRequested { false };

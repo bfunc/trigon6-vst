@@ -4,6 +4,7 @@
 #include "core/Globals.h"
 #include "core/Nrpn.h"
 #include "core/Packed.h"
+#include "core/PortMatch.h"
 #include "core/ParamTable.h"
 #include "core/SendQueue.h"
 #include "core/Sysex.h"
@@ -297,11 +298,12 @@ static LinkSnapshot connectedSnapshot()
     s.inOpen = s.outOpen = true;
     s.probeSentMs = 5000;
     s.inquiryMs = 5100;
+    s.lastAnyInMs = 5600;
     s.device.isTrigon6 = true;
     s.globalsMs = 5300;
     s.editBufferMs = 5600;
     s.editBufferOk = true;
-    s.editBufferSize = 1175;
+    s.editBufferSize = 1171;
     // what the synth sent while its globals were changed: Xmit NR, Rcv NR, SysEx USB, Out USB, channel 1
     for (auto [n, v] : std::vector<std::pair<int, int>> { { 1029, 2 }, { 1030, 2 }, { 1032, 1 }, { 1033, 1 }, { 1026, 1 } })
     {
@@ -312,54 +314,132 @@ static LinkSnapshot connectedSnapshot()
     return s;
 }
 
+static LinkSnapshot portsOnly()
+{
+    LinkSnapshot s;
+    s.nowMs = 1000;
+    s.inName = s.outName = "Trigon 6 Module";
+    s.inOpen = s.outOpen = true;
+    return s;
+}
+
+static const CheckItem& step (const Report& r, size_t i) { return r.steps[i]; }
+enum { kIn, kOut, kRx, kTx, kSysex, kKnobs, kRcv, kChannel };
+
 static void testConnection()
 {
     auto s = connectedSnapshot();
     auto rep = evaluate (s);
-    CHECK (rep.allOk);
+    CHECK (rep.allOk && rep.verdict == "Connected." && rep.highlightButton < 0);
+    CHECK (rep.steps.size() == 8);
 
-    // the NRPN a synth sent is newer than the dump, so it wins over the dump's 0
-    CHECK (readGlobal (s, 1032).known && readGlobal (s, 1032).raw == 1 && ! readGlobal (s, 1032).fromDump);
-    s.globalsMs = 7000;  // a newer dump says SysEx = 0: only a warning (dump order not checked yet)
-    CHECK (readGlobal (s, 1032).fromDump);
-    CHECK (globalHealth (s, *globalByNrpn (1032)) == (kDumpOrderVerified ? Health::Bad : Health::Warn));
-    CHECK (! evaluate (s).allOk);
-
-    // no answer to Check after the timeout
-    s = connectedSnapshot();
-    s.probeSentMs = 9000;
-    s.nowMs = 9000 + kProbeTimeoutMs + 1;
+    // priority: the synth's NRPN, then proof, then the dump
+    CHECK (readGlobal (s, 1032).source == Source::Nrpn);
+    s.globalNrpn.erase (1032);
+    CHECK (readGlobal (s, 1032).source == Source::Proof && readGlobal (s, 1032).raw == 1);  // a dump arrived: USB
+    s.globalNrpn.erase (1030);  // Param Rcv now only in the dump, which says 0
+    CHECK (readGlobal (s, 1030).source == Source::Dump);
     rep = evaluate (s);
-    CHECK (! rep.allOk);
-    CHECK (rep.items[2].health == Health::Bad);  // device inquiry
-    s.nowMs = 9100;  // still waiting
-    CHECK (evaluate (s).items[2].health == Health::Unknown);
+    CHECK (step (rep, kRcv).health == (kDumpOrderVerified ? Health::Bad : Health::Warn));
+    CHECK (! rep.allOk && rep.verdict.find ("Param Rcv") != std::string::npos);
+    CHECK (rep.highlightRow == 0 && rep.highlightButton == 6);
 
-    // port busy
-    s = connectedSnapshot();
-    s.inOpen = false;
-    CHECK (evaluate (s).items[0].health == Health::Bad && ! evaluate (s).allOk);
+    // nothing at all comes back: MIDI Out is the likely cause
+    s = portsOnly();
+    s.probeSentMs = 1000;
+    s.nowMs = 1000 + kProbeTimeoutMs + 1;
+    rep = evaluate (s);
+    CHECK (step (rep, kRx).health == Health::Bad);
+    CHECK (rep.highlightRow == 0 && rep.highlightButton == 9);
+    CHECK (step (rep, kSysex).blocked && step (rep, kChannel).blocked);
+    s.nowMs = 1100;  // still waiting
+    CHECK (step (evaluate (s), kRx).health == Health::Unknown);
 
-    // channel: synth on 5, plugin on 1 -> bad; synth on All -> ok
+    // knob moves arrive but no SysEx answer: the note test tells "SysEx off" from "nothing reaches the synth"
+    s = portsOnly();
+    s.probeSentMs = 1000;
+    s.nowMs = 5000;
+    s.lastAnyInMs = s.lastNrpnMs = 2000;
+    s.nrpnInCount = 3;
+    s.lastNrpnChannel = 1;
+    rep = evaluate (s);
+    CHECK (step (rep, kRx).health == Health::Ok && step (rep, kTx).health == Health::Warn && rep.offerNoteTest);
+    CHECK (step (rep, kSysex).health == Health::Warn);
+    CHECK (readGlobal (s, 1033).source == Source::Proof && readGlobal (s, 1029).text == "NR or nAS");
+    s.noteTest = NoteTest::Heard;
+    rep = evaluate (s);
+    CHECK (step (rep, kTx).health == Health::Ok && step (rep, kSysex).health == Health::Bad);
+    CHECK (rep.highlightButton == 8);  // MIDI SysEx
+    s.noteTest = NoteTest::NotHeard;
+    CHECK (step (evaluate (s), kTx).health == Health::Bad);
+
+    // panel moves come as CC: Param Xmit is CC
     s = connectedSnapshot();
-    s.globalNrpn[1026] = 5;
-    CHECK (! evaluate (s).allOk);
-    s.globalNrpn[1026] = 0;
+    s.globalNrpn.erase (1029);
+    s.paramCcInCount = 4;
+    CHECK (readGlobal (s, 1029).raw == 1 && step (evaluate (s), kKnobs).health == Health::Bad);
+
+    // the synth is on channel 5 (seen), the plugin on 1
+    s = connectedSnapshot();
+    s.globalNrpn.erase (1026);
+    s.nrpnInCount = 1;
+    s.lastNrpnChannel = 5;
+    rep = evaluate (s);
+    CHECK (! rep.allOk && rep.suggestChannel == 5 && step (rep, kChannel).health == Health::Bad);
+    s.globalNrpn[1026] = 0;  // the synth says All
     CHECK (evaluate (s).allOk);
 
-    // Param Xmit off, read from the synth's own NRPN -> bad
-    s.globalNrpn[1029] = 0;
-    CHECK (globalHealth (s, *globalByNrpn (1029)) == Health::Bad);
+    // port busy: the verdict is about the port, later steps wait
+    s = connectedSnapshot();
+    s.inOpen = false;
+    rep = evaluate (s);
+    CHECK (! rep.allOk && rep.verdict.find ("Input port") == 0 && step (rep, kRx).blocked);
+    s = connectedSnapshot();
+    s.inName.clear();
+    s.inOpen = false;
+    CHECK (evaluate (s).verdictFix.find ("USB cable") != std::string::npos);
 
-    // host output needs no output port
+    // through the host nothing can be proven by round trip; it is not required then
     s = connectedSnapshot();
     s.hostOutput = true;
     s.outOpen = false;
     s.outName.clear();
-    CHECK (evaluate (s).allOk);
+    s.inquiryMs = s.globalsMs = s.editBufferMs = -1;
+    s.probeSentMs = -1;
+    rep = evaluate (s);
+    CHECK (rep.allOk && rep.offerNoteTest);
 
-    // knob moves are optional: none yet keeps allOk
-    CHECK (evaluate (connectedSnapshot()).items.back().health == Health::Unknown);
+    // warnings
+    s = connectedSnapshot();
+    s.echoCount = 3;
+    s.globalNrpn[1027] = 2;  // MIDI Clock In
+    s.globalNrpnMs[1027] = 6000;
+    rep = evaluate (s);
+    CHECK (rep.allOk && rep.warnings.size() == 2);
+
+    CHECK (! isParameterCc (1) && ! isParameterCc (99) && ! isParameterCc (64) && ! isParameterCc (123));
+    CHECK (isParameterCc (102) && isParameterCc (74));
+}
+
+static void testPortMatch()
+{
+    CHECK (normalizePortName ("Trigon 6 Module") == "trigon 6 module");
+    CHECK (normalizePortName ("2- Trigon 6 Module") == "trigon 6 module");
+    CHECK (normalizePortName ("Trigon 6 Module [0]") == "trigon 6 module");
+    CHECK (normalizePortName ("Trigon 6 Module 1") == "trigon 6 module");
+    CHECK (normalizePortName ("  MIDIIN2  (Trigon 6) ") == "midiin2 (trigon 6)");
+
+    const std::vector<std::string> ports { "Microsoft GS Wavetable Synth", "3- Trigon 6 Module" };
+    auto p = pickPort (ports, "");
+    CHECK (p.index == 1 && ! p.savedMissing);
+    p = pickPort (ports, "Trigon 6 Module");  // saved before the synth moved to another USB socket
+    CHECK (p.index == 1 && ! p.savedMissing);
+    p = pickPort (ports, "Microsoft GS Wavetable Synth");
+    CHECK (p.index == 0);
+    p = pickPort (ports, "loopMIDI Port");  // gone: fall back to the Trigon, and say so
+    CHECK (p.index == 1 && p.savedMissing);
+    p = pickPort ({ "Microsoft GS Wavetable Synth" }, "");
+    CHECK (p.index == -1);
 }
 
 int main()
@@ -367,6 +447,7 @@ int main()
     testSysexReplies();
     testGlobals();
     testConnection();
+    testPortMatch();
     testNrpnEncode();
     testNrpnDecode();
     testPacked();

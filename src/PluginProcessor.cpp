@@ -53,7 +53,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout Trigon6Processor::createLayo
 Trigon6Processor::Trigon6Processor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "Trigon6", createLayout()),
-      queue (t6::paramTable().size())
+      queue (t6::paramTable().size()),
+      link (SynthLink::acquire())
 {
     for (const auto& p : t6::paramTable())
         raw.push_back (apvts.getRawParameterValue (p.id));
@@ -68,13 +69,13 @@ Trigon6Processor::~Trigon6Processor() { pump.stopThread (1000); }
 
 void Trigon6Processor::setHostOutput (bool host)
 {
-    link.setHostOutput (host);
+    link->setHostOutput (host);
     apvts.state.setProperty (kOutputMode, host ? "host" : "direct", nullptr);
 }
 
 void Trigon6Processor::setPortChoice (const juce::String& inputName, const juce::String& outputName)
 {
-    link.setPortChoice (inputName, outputName);
+    link->setPortChoice (inputName, outputName);
     apvts.state.setProperty (kInPort, inputName, nullptr);
     apvts.state.setProperty (kOutPort, outputName, nullptr);
 }
@@ -120,10 +121,10 @@ void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::Midi
     audio.clear();
     midi.clear();  // incoming MIDI is not passed on (the plugin reads the synth through its own input port)
 
-    if (! link.isHostOutput())
+    if (! link->isHostOutput())
         return;
 
-    link.drainHostOutput (midi);
+    link->drainHostOutput (midi);
     const juce::ScopedTryLock sl (queueLock);
     if (! sl.isLocked())
         return;  // a mode switch is in progress; the next block sends
@@ -131,16 +132,17 @@ void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::Midi
     {
         for (auto cc : t6::encodeNrpn (param, value))
             midi.addEvent (juce::MidiMessage::controllerEvent (ch, cc.controller, cc.value), 0);
+        link->noteSentThroughHost (param, value);
     });
 }
 
 void Trigon6Processor::pumpDirect()
 {
     // Until the port is open, changes stay pending and go out once it is.
-    if (link.isHostOutput() || ! link.isOutputOpen())
+    if (link->isHostOutput() || ! link->isOutputOpen())
         return;
     const juce::ScopedLock sl (queueLock);
-    runQueue ([&] (int ch, int param, int value) { link.sendNrpn (ch, param, value); });
+    runQueue ([&] (int ch, int param, int value) { link->sendNrpn (ch, param, value); });
 }
 
 void Trigon6Processor::getStateInformation (juce::MemoryBlock& dest)
@@ -157,8 +159,8 @@ void Trigon6Processor::setStateInformation (const void* data, int size)
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             midiChannel = juce::jlimit (1, 16, (int) apvts.state.getProperty (kChannel, 1));
             if (apvts.state.hasProperty (kOutputMode))
-                link.setHostOutput (apvts.state.getProperty (kOutputMode).toString() == "host");
-            link.setPortChoice (apvts.state.getProperty (kInPort).toString(), apvts.state.getProperty (kOutPort).toString());
+                link->setHostOutput (apvts.state.getProperty (kOutputMode).toString() == "host");
+            link->setPortChoice (apvts.state.getProperty (kInPort).toString(), apvts.state.getProperty (kOutPort).toString());
             needsPrime = true;  // a loaded project does not overwrite the synth; "Send all" does that
         }
 }
