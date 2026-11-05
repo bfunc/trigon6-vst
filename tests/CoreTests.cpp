@@ -5,6 +5,7 @@
 #include "core/Nrpn.h"
 #include "core/Packed.h"
 #include "core/PortMatch.h"
+#include "core/Presets.h"
 #include "core/ParamTable.h"
 #include "core/SendQueue.h"
 #include "core/Sysex.h"
@@ -212,6 +213,27 @@ static void testTable()
         CHECK (indexOfNrpn (p.nrpn) >= 0 && t[(size_t) indexOfNrpn (p.nrpn)].nrpn == p.nrpn);
     }
     CHECK (indexOfNrpn (37) == -1);  // a gap in the numbering
+
+    // Osc 3 saw: one control on NRPN 7 (on) and 107 (rising), as the synth's button steps it
+    const auto& saw = t[(size_t) indexOfNrpn (7)];
+    CHECK (indexOfNrpn (107) == indexOfNrpn (7) && saw.nrpn2 == 107 && saw.kind == Kind::Choice);
+    CHECK (formatValue (saw, 0) == "Off" && formatValue (saw, 1) == "Saw" && formatValue (saw, 2) == "Ramp");
+    auto sends = [&] (int v) { std::vector<std::pair<int, int>> r; for (auto nv : nrpnValues (saw, v)) r.push_back ({ nv.nrpn, nv.value }); return r; };
+    CHECK ((sends (0) == std::vector<std::pair<int, int>> { { 7, 0 }, { 107, 0 } }));
+    CHECK ((sends (1) == std::vector<std::pair<int, int>> { { 7, 1 }, { 107, 0 } }));
+    CHECK ((sends (2) == std::vector<std::pair<int, int>> { { 7, 1 }, { 107, 1 } }));
+    // the synth's presses: off -> 7 = 1 -> saw; 107 = 1 -> ramp; 7 = 0 -> off; then 107 = 0 keeps it off
+    int v = 0;
+    v = valueAfterNrpn (saw, v, 7, 1);   CHECK (v == 1);
+    v = valueAfterNrpn (saw, v, 107, 1); CHECK (v == 2);
+    v = valueAfterNrpn (saw, v, 7, 0);   CHECK (v == 0);
+    v = valueAfterNrpn (saw, v, 107, 0); CHECK (v == 0);
+    CHECK (valueAfterNrpn (saw, 0, 107, 1) == 0);  // ramp alone does not switch the saw on
+    CHECK (valueFromBytes (saw, 1, 1) == 2 && valueFromBytes (saw, 1, 0) == 1 && valueFromBytes (saw, 0, 1) == 0);
+    // a plain parameter: one NRPN, the value as it is
+    const auto& cutoff = t[(size_t) indexOfNrpn (29)];
+    CHECK (nrpnValues (cutoff, 100).size() == 1 && nrpnValues (cutoff, 100)[0].nrpn == 29);
+    CHECK (valueAfterNrpn (cutoff, 5, 29, 100) == 100 && valueFromBytes (cutoff, 42, 0) == 42);
 
     // ranges from the manual (1.1) that the plugin must get right
     CHECK (t[(size_t) indexOfNrpn (29)].max == 164);   // cutoff
@@ -460,8 +482,90 @@ static void testPortMatch()
     CHECK (p.index == -1);
 }
 
+static std::vector<uint8_t> storedDump (int bank, int program, const std::vector<uint8_t>& data)
+{
+    auto packed = packMsBit (data.data(), data.size());
+    std::vector<uint8_t> m { 0xF0, 0x01, 0x39, 0x02, (uint8_t) bank, (uint8_t) program };
+    m.insert (m.end(), packed.begin(), packed.end());
+    m.push_back (0xF7);
+    return m;
+}
+
+static void testPresets()
+{
+    // name at the guessed place, padded with spaces
+    std::vector<uint8_t> data (1024, 0x7F);
+    const std::string name = "Bright Bass";
+    for (size_t i = 0; i < kNameLength; ++i)
+        data[kNameOffset + i] = (uint8_t) (i < name.size() ? name[i] : ' ');
+    CHECK (programName (data) == "Bright Bass");
+    CHECK (kNameOffset == 116);
+    // not text there: no name, even when other bytes look like text (sequencer notes are 60 = '<')
+    std::vector<uint8_t> other (1024, 60);
+    other[kNameOffset] = 200;
+    CHECK (programName (other) == "");
+    CHECK (programName (std::vector<uint8_t> (1024, 0)) == "");
+
+    CHECK (programLabel (0, 23) == "U 023");
+    CHECK (programLabel (4, 99) == "U 499");
+    CHECK (programLabel (5, 0) == "F 000");
+    CHECK (programLabel (7, 12) == "F 212");
+    CHECK (presetFileName (0, 23, "Bass: A/B?") == "U023 Bass_ A_B_.syx");
+    CHECK (presetFileName (5, 1, "") == "F001.syx");
+    CHECK (sanitizeFileName ("End. ") == "End");
+    CHECK (cacheFileName (3, 42) == "b3-p042.syx");
+    auto bp = parseCacheFileName ("b3-p042.syx");
+    CHECK (bp && bp->first == 3 && bp->second == 42);
+    CHECK (! parseCacheFileName ("b11-p042.syx"));
+    CHECK (! parseCacheFileName ("U023 Bass.syx"));
+
+    auto msg = storedDump (2, 7, data);
+    auto sp = parseStoredProgram (msg.data(), msg.size(), 0x39);
+    CHECK (sp && sp->bank == 2 && sp->program == 7 && sp->name == "Bright Bass" && sp->sysex == msg && sp->data == data);
+    auto sp2 = parseStoredProgram (msg.data() + 1, msg.size() - 2, 0x39);  // JUCE strips F0/F7
+    CHECK (sp2 && sp2->sysex == msg);
+    CHECK (! parseStoredProgram (msg.data(), msg.size(), 0x2D));
+
+    // cache status: new -> read; same again -> read; different -> updated, and it stays updated
+    PresetEntry e;
+    CHECK (storeFetched (e, *sp) && e.status == PresetStatus::Fetched);
+    CHECK (! storeFetched (e, *sp) && e.status == PresetStatus::Fetched);
+    PresetEntry cached { PresetStatus::Cached, "Bright Bass", msg };
+    CHECK (! storeFetched (cached, *sp) && cached.status == PresetStatus::Fetched);
+    data[0] = 1;
+    auto changedMsg = storedDump (2, 7, data);
+    auto sp3 = parseStoredProgram (changedMsg.data(), changedMsg.size(), 0x39);
+    CHECK (storeFetched (cached, *sp3) && cached.status == PresetStatus::Updated);
+    CHECK (! storeFetched (cached, *sp3) && cached.status == PresetStatus::Updated);
+
+    // fetch queue: one at a time, a retry, then failure
+    FetchQueue q (1000.0, 1);
+    q.enqueue (0, 0);
+    q.enqueue (0, 1);
+    q.enqueue (0, 1);  // already waiting
+    CHECK (q.total() == 2);
+    auto st = q.poll (0);
+    CHECK (st.kind == FetchQueue::Step::Send && st.program == 0);
+    CHECK (q.poll (500).kind == FetchQueue::Step::None);  // still waiting
+    CHECK (! q.received (0, 1));                          // not the one asked for
+    CHECK (q.received (0, 0) && q.finished() == 1);
+    st = q.poll (600);
+    CHECK (st.kind == FetchQueue::Step::Send && st.program == 1);
+    st = q.poll (1700);
+    CHECK (st.kind == FetchQueue::Step::Send && st.program == 1);  // retry
+    st = q.poll (2800);
+    CHECK (st.kind == FetchQueue::Step::Failed && st.program == 1 && q.failed() == 1);
+    CHECK (! q.busy() && q.finished() == 2);
+    q.enqueue (1, 5);
+    q.enqueue (1, 9, true);  // in front
+    CHECK (q.total() == 2 && q.poll (0).program == 9);
+    q.cancel();
+    CHECK (! q.busy() && q.poll (0).kind == FetchQueue::Step::None);
+}
+
 int main()
 {
+    testPresets();
     testSysexReplies();
     testGlobals();
     testConnection();

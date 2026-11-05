@@ -44,11 +44,26 @@ struct ParamDef
     Kind kind;
     int center = 0;                    // Bipolar only
     std::vector<std::string> choices;  // Choice only: max - min + 1 names
+    // A second NRPN for one control (Osc 3 saw: Off / Saw / Ramp). The synth sends `nrpn` = 1 for "on"
+    // and nrpn2 = 1 for "rising"; -1 = a plain one-NRPN parameter.
+    int nrpn2 = -1;
 };
+
+struct NrpnValue
+{
+    int nrpn, value;
+};
+
+// What goes out for a parameter value: one NRPN, or for a two-NRPN control both, in the synth's order.
+std::vector<NrpnValue> nrpnValues (const ParamDef& p, int value);
+// The parameter's value after the synth sent `nrpn` = nrpnValue (nrpn is p.nrpn or p.nrpn2).
+int valueAfterNrpn (const ParamDef& p, int current, int nrpn, int nrpnValue);
+// The parameter's value from a program's bytes at nrpn and nrpn2 (for a plain parameter, the first).
+int valueFromBytes (const ParamDef& p, int atNrpn, int atNrpn2);
 
 const std::vector<ParamDef>& paramTable();
 
-// Index into paramTable() for an NRPN number, or -1 if the plugin does not know it.
+// Index into paramTable() for an NRPN number (either NRPN of a two-NRPN control), or -1 if the plugin does not know it.
 int indexOfNrpn (int nrpn);
 
 // Display text for a raw NRPN value, e.g. "-12", "On", "PH1".

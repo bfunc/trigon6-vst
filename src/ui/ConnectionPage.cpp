@@ -2,6 +2,7 @@
 
 #include "Theme.h"
 #include "core/Globals.h"
+#include "core/ParamTable.h"
 
 namespace
 {
@@ -102,6 +103,25 @@ ConnectionPage::ConnectionPage (Trigon6Processor& p) : proc (p)
         addChildComponent (*b);
     playNote.setVisible (true);
 
+    monitorTitle.setText ("NRPN from the synth (newest first): turn a knob or press a button on the synth", juce::dontSendNotification);
+    monitorTitle.setColour (juce::Label::textColourId, theme::dim);
+    addAndMakeVisible (monitorTitle);
+    monitor.setMultiLine (true);
+    monitor.setReadOnly (true);
+    monitor.setCaretVisible (false);
+    monitor.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain));
+    monitor.setColour (juce::TextEditor::backgroundColourId, theme::section);
+    monitor.setColour (juce::TextEditor::textColourId, theme::text);
+    monitor.setColour (juce::TextEditor::outlineColourId, theme::border);
+    addAndMakeVisible (monitor);
+    clearMonitor.onClick = [this]
+    {
+        monitorLines.clear();
+        monitor.clear();
+    };
+    addAndMakeVisible (clearMonitor);
+    monitorSeen = proc.getLink().incomingSeq();
+
     timerCallback();
     startTimerHz (5);
 }
@@ -129,6 +149,26 @@ void ConnectionPage::timerCallback()
 {
     if (++ticks % 10 == 0)
         refreshPortLists();
+
+    {
+        std::vector<SynthLink::InEvent> events;
+        monitorSeen = proc.getLink().readIncoming (monitorSeen, events);
+        for (const auto& e : events)
+        {
+            juce::String name = "not in the table";
+            if (const int i = t6::indexOfNrpn (e.param); i >= 0)
+                name = t6::paramTable()[(size_t) i].name;
+            else if (const auto* g = t6::globalByNrpn (e.param))
+                name = juce::String ("Global ") + g->name;
+            monitorLines.insert (0, juce::Time::getCurrentTime().formatted ("%H:%M:%S") + "   ch " + juce::String (e.channel)
+                                        + "   NRPN " + juce::String (e.param) + " = " + juce::String (e.value) + "   (" + name + ")");
+        }
+        if (! events.empty())
+        {
+            monitorLines.removeRange (60, monitorLines.size());
+            monitor.setText (monitorLines.joinIntoString ("\n"), false);
+        }
+    }
 
     snap = proc.getLink().snapshot (proc.getMidiChannel());
     const bool was = report.allOk;
@@ -176,6 +216,12 @@ void ConnectionPage::resized()
     useChannel.setBounds (tests.removeFromLeft (140));
 
     r.removeFromTop (12);
+    auto monitorArea = r.removeFromBottom (150);
+    r.removeFromBottom (8);
+    auto monitorBar = monitorArea.removeFromTop (24);
+    clearMonitor.setBounds (monitorBar.removeFromRight (70));
+    monitorTitle.setBounds (monitorBar);
+    monitor.setBounds (monitorArea);
     checklistArea = r.removeFromLeft ((int) (r.getWidth() * 0.42f));
     r.removeFromLeft (12);
     globalsArea = r;

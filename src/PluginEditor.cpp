@@ -3,6 +3,7 @@
 #include "core/ParamTable.h"
 #include "ui/ConnectionPage.h"
 #include "ui/PanelLayout.h"
+#include "ui/PresetsPage.h"
 #include "ui/Theme.h"
 
 #include <cstring>
@@ -36,6 +37,72 @@ juce::String shortName (const t6::ParamDef& p)
         return n.substring (3);  // "A Type", "B Dry/Wet"
     return n;
 }
+
+// Osc 3 saw, as on the synth: one button with two LEDs above it, falling saw (left) and rising ramp (right).
+// A click steps Off -> Saw -> Ramp -> Off like the synth's button; values from the synth light the LEDs.
+class SawRampButton : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    explicit SawRampButton (juce::RangedAudioParameter& p)
+        : attachment (p, [this] (float v) { value = juce::roundToInt (v); repaint(); }, nullptr)
+    {
+        attachment.sendInitialUpdate();
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat().reduced (2.0f);
+        auto top = r.removeFromTop (juce::jmin (34.0f, r.getHeight() * 0.5f));
+        const float cx = top.getCentreX(), gap = 11.0f;
+
+        auto led = [&] (float x, bool on)
+        {
+            const float d = 9.0f;
+            juce::Rectangle<float> e (x - d / 2, top.getY() + 2.0f, d, d);
+            g.setColour (on ? colours::led : colours::led.withAlpha (0.2f));
+            g.fillEllipse (e);
+        };
+        led (cx - gap, value == 1);
+        led (cx + gap, value == 2);
+
+        // the wave symbols under the LEDs
+        const float y0 = top.getY() + 16.0f, y1 = top.getBottom() - 2.0f, w = 4.0f;
+        juce::Path saw, ramp;
+        saw.startNewSubPath (cx - gap - w, y1);
+        saw.lineTo (cx - gap - w, y0);
+        saw.lineTo (cx - gap + w, y1);
+        ramp.startNewSubPath (cx + gap - w, y1);
+        ramp.lineTo (cx + gap + w, y0);
+        ramp.lineTo (cx + gap + w, y1);
+        g.setColour (colours::text);
+        g.strokePath (saw, juce::PathStrokeType (1.5f));
+        g.strokePath (ramp, juce::PathStrokeType (1.5f));
+
+        auto body = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), 44.0f), juce::jmin (r.getHeight(), 30.0f));
+        g.setColour (pressed ? colours::border.brighter (0.3f) : colours::border);
+        g.fillRoundedRectangle (body, 4.0f);
+        g.setColour (colours::background);
+        g.drawRoundedRectangle (body, 4.0f, 1.0f);
+    }
+
+    void mouseDown (const juce::MouseEvent&) override
+    {
+        pressed = true;
+        attachment.setValueAsCompleteGesture ((float) ((value + 1) % 3));
+        repaint();
+    }
+    void mouseUp (const juce::MouseEvent&) override
+    {
+        pressed = false;
+        repaint();
+    }
+
+private:
+    juce::ParameterAttachment attachment;
+    int value = 0;
+    bool pressed = false;
+};
 
 // One control on the panel: a big knob, an LED-style toggle, a drop-down, or a placeholder for an unknown NRPN.
 class Cell : public juce::Component, public juce::SettableTooltipClient
@@ -74,6 +141,13 @@ public:
                 break;
 
             case t6::Kind::Choice:
+                if (p->nrpn2 >= 0)
+                {
+                    sawRamp = std::make_unique<SawRampButton> (*param);
+                    addAndMakeVisible (*sawRamp);
+                    label.setText (shortName (*p), juce::dontSendNotification);
+                    break;
+                }
                 combo = std::make_unique<juce::ComboBox>();
                 for (size_t i = 0; i < p->choices.size(); ++i)
                     combo->addItem (p->choices[i], (int) i + 1);
@@ -93,7 +167,8 @@ public:
                 label.setText (shortName (*p), juce::dontSendNotification);
                 break;
         }
-        setTooltip (juce::String (p->name) + "  (NRPN " + juce::String (p->nrpn) + ")");
+        setTooltip (juce::String (p->name) + "  (NRPN " + juce::String (p->nrpn)
+                    + (p->nrpn2 >= 0 ? " + " + juce::String (p->nrpn2) + "; click steps Off, Saw, Ramp" : juce::String()) + ")");
     }
 
     void resized() override
@@ -106,7 +181,9 @@ public:
         }
         auto labelArea = r.removeFromBottom (18);
         label.setBounds (labelArea);
-        if (combo)
+        if (sawRamp)
+            sawRamp->setBounds (r);
+        else if (combo)
             combo->setBounds (r.withSizeKeepingCentre (r.getWidth(), juce::jmin (28, r.getHeight())));
         else if (knob)
             knob->setBounds (r);
@@ -119,6 +196,7 @@ private:
     std::unique_ptr<juce::Slider> knob;
     std::unique_ptr<juce::TextButton> button;
     std::unique_ptr<juce::ComboBox> combo;
+    std::unique_ptr<SawRampButton> sawRamp;
     std::unique_ptr<APVTS::SliderAttachment> sliderAttach;
     std::unique_ptr<APVTS::ButtonAttachment> buttonAttach;
     std::unique_ptr<APVTS::ComboBoxAttachment> comboAttach;
@@ -274,6 +352,7 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     auto* connection = new ConnectionPage (proc);
     tabs->addTab ("Connection", colours::section, connection, true);
     tabs->addTab ("Panel", colours::section, new PanelPage (proc.apvts), true);
+    tabs->addTab ("Presets", colours::section, new PresetsPage (proc), true);
     tabs->show (connection->getReport().allOk ? 1 : 0);
     // Just after opening (the standalone app checks the synth on start), move to the panel once all is green.
     const auto openedMs = juce::Time::getMillisecondCounter();

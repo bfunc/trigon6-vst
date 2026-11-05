@@ -126,6 +126,8 @@ src/ui/PanelLayout.*    where each parameter sits on the panel
 src/PluginProcessor.*   JUCE: parameters (APVTS) from the table, NRPN out in processBlock
 src/PluginEditor.*      JUCE: top bar, tabs, the panel
 src/ui/ConnectionPage.* JUCE: the Connection page
+src/ui/PresetsPage.*    JUCE: the Presets page (bank list, fetch, cache, .syx files)
+src/core/Presets.*      program names and labels, file names, stored program dumps, fetch queue
 tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, globals, diagnosis rules, port names, table and layout
 ```
 

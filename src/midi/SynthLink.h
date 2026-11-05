@@ -13,10 +13,12 @@
 
 #include "core/Connection.h"
 #include "core/Nrpn.h"
+#include "core/Presets.h"
 
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <vector>
 
@@ -51,7 +53,7 @@ public:
 
     t6::LinkSnapshot snapshot (int pluginChannel) const;
 
-    // NRPN the synth sent (a knob turned on the panel, with Param Xmit = NR), numbered in arrival order.
+    // NRPN the synth sent (a knob turned on the panel, with Param Xmit = NR; globals too), numbered in arrival order.
     // Every plugin copy reads them on its own: pass the last seq it saw, get the newer events and the new
     // last seq. Echoes of what the plugin sent are not included.
     struct InEvent
@@ -66,6 +68,27 @@ public:
     void requestEditBuffer();
     uint32_t editBufferSeq() const;
     std::vector<uint8_t> editBuffer() const;  // the 1024 unpacked bytes of the last good dump
+    std::vector<uint8_t> editBufferSysex() const;  // that dump as it arrived, F0 ... F7
+
+    // Stored programs: ask for one; each good program dump that arrives is kept (the last 64) with a seq.
+    void requestProgram (int bank, int program);
+    struct ProgramIn
+    {
+        uint32_t seq = 0;
+        t6::StoredProgram program;
+    };
+    uint32_t readPrograms (uint32_t afterSeq, std::vector<ProgramIn>& out) const;
+    uint32_t programSeq() const;
+
+    // Program changes: load a program (Bank Select CC 0 = 0, CC 32 = bank, then Program Change), and the
+    // last one the synth sent (when a program is picked on its panel). seq 0 = none yet.
+    void sendProgramChange (int channel, int bank, int program);
+    struct ProgramChangeIn
+    {
+        uint32_t seq = 0;
+        int channel = 0, bank = 0, program = 0;
+    };
+    ProgramChangeIn lastProgramChange() const;
 
 private:
     SynthLink();
@@ -108,6 +131,11 @@ private:
     std::array<InEvent, 256> inEvents;  // ring, guarded by stateLock
     uint32_t inSeq = 0;                 // seq of the newest event, guarded by stateLock
     std::vector<uint8_t> editData;      // guarded by stateLock
+    std::vector<uint8_t> editSysex;     // guarded by stateLock
+    std::deque<ProgramIn> programsIn;   // guarded by stateLock
+    uint32_t programInSeq = 0;          // guarded by stateLock
+    ProgramChangeIn pcIn;               // guarded by stateLock
+    std::array<int, 16> bankIn {};      // MIDI thread: the last Bank Select per channel
     uint32_t editSeq = 0;               // guarded by stateLock
 
     int probeStep = -1;  // message thread: next request of a running Check
