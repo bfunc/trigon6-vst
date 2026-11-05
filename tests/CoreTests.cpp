@@ -214,6 +214,27 @@ static void testTable()
     }
     CHECK (indexOfNrpn (37) == -1);  // a gap in the numbering
 
+    // Osc 3 saw: one control on NRPN 7 (on) and 107 (rising), as the synth's button steps it
+    const auto& saw = t[(size_t) indexOfNrpn (7)];
+    CHECK (indexOfNrpn (107) == indexOfNrpn (7) && saw.nrpn2 == 107 && saw.kind == Kind::Choice);
+    CHECK (formatValue (saw, 0) == "Off" && formatValue (saw, 1) == "Saw" && formatValue (saw, 2) == "Ramp");
+    auto sends = [&] (int v) { std::vector<std::pair<int, int>> r; for (auto nv : nrpnValues (saw, v)) r.push_back ({ nv.nrpn, nv.value }); return r; };
+    CHECK ((sends (0) == std::vector<std::pair<int, int>> { { 7, 0 }, { 107, 0 } }));
+    CHECK ((sends (1) == std::vector<std::pair<int, int>> { { 7, 1 }, { 107, 0 } }));
+    CHECK ((sends (2) == std::vector<std::pair<int, int>> { { 7, 1 }, { 107, 1 } }));
+    // the synth's presses: off -> 7 = 1 -> saw; 107 = 1 -> ramp; 7 = 0 -> off; then 107 = 0 keeps it off
+    int v = 0;
+    v = valueAfterNrpn (saw, v, 7, 1);   CHECK (v == 1);
+    v = valueAfterNrpn (saw, v, 107, 1); CHECK (v == 2);
+    v = valueAfterNrpn (saw, v, 7, 0);   CHECK (v == 0);
+    v = valueAfterNrpn (saw, v, 107, 0); CHECK (v == 0);
+    CHECK (valueAfterNrpn (saw, 0, 107, 1) == 0);  // ramp alone does not switch the saw on
+    CHECK (valueFromBytes (saw, 1, 1) == 2 && valueFromBytes (saw, 1, 0) == 1 && valueFromBytes (saw, 0, 1) == 0);
+    // a plain parameter: one NRPN, the value as it is
+    const auto& cutoff = t[(size_t) indexOfNrpn (29)];
+    CHECK (nrpnValues (cutoff, 100).size() == 1 && nrpnValues (cutoff, 100)[0].nrpn == 29);
+    CHECK (valueAfterNrpn (cutoff, 5, 29, 100) == 100 && valueFromBytes (cutoff, 42, 0) == 42);
+
     // ranges from the manual (1.1) that the plugin must get right
     CHECK (t[(size_t) indexOfNrpn (29)].max == 164);   // cutoff
     CHECK (t[(size_t) indexOfNrpn (36)].max == 254);   // filter env amount

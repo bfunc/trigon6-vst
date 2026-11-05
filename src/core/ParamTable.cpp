@@ -48,6 +48,15 @@ ParamDef pick (int nrpn, const char* id, const char* name, S s, std::vector<std:
     return { nrpn, id, name, s, 0, (int) names.size() - 1, Kind::Choice, 0, std::move (names) };
 }
 
+// Osc 3 saw: one button, two LEDs. Each press steps Off -> Saw (falling) -> Ramp (rising) -> Off, sending
+// NRPN 7 = 1, then 107 = 1, then 7 = 0 and 107 = 0 (seen on the synth, 2026-11-05).
+ParamDef sawRamp (int nrpn, int nrpn2, const char* id, const char* name, S s)
+{
+    ParamDef p { nrpn, id, name, s, 0, 2, Kind::Choice, 0, { "Off", "Saw", "Ramp" } };
+    p.nrpn2 = nrpn2;
+    return p;
+}
+
 const std::vector<std::string> octaves { "-2", "-1", "0", "+1", "+2" };
 const std::vector<std::string> fxA { "Off", "BBD", "DDL", "Chorus", "PH1", "PH2", "PH3", "Ring", "FL1", "FL2" };
 
@@ -68,7 +77,7 @@ std::vector<ParamDef> build()
         bip  (4, "osc3_pitch", "Osc 3 Pitch", S::Oscillators, 1400, 700),
         onOff (5, "osc1_saw", "Osc 1 Saw", S::Oscillators),
         onOff (6, "osc2_saw", "Osc 2 Saw", S::Oscillators),
-        onOff (7, "osc3_saw", "Osc 3 Saw", S::Oscillators), // manual: "Osc 3 Saw Fall"
+        sawRamp (7, 107, "osc3_saw", "Osc 3 Saw", S::Oscillators), // manual: "Osc 3 Saw Fall"; 107 is not in it
         onOff (8, "osc1_tri", "Osc 1 Tri", S::Oscillators),
         onOff (9, "osc2_tri", "Osc 2 Tri", S::Oscillators),
         onOff (10, "osc3_tri", "Osc 3 Tri", S::Oscillators),
@@ -198,11 +207,44 @@ int indexOfNrpn (int nrpn)
         std::unordered_map<int, int> m;
         const auto& t = paramTable();
         for (int i = 0; i < (int) t.size(); ++i)
+        {
             m[t[(size_t) i].nrpn] = i;
+            if (t[(size_t) i].nrpn2 >= 0)
+                m[t[(size_t) i].nrpn2] = i;
+        }
         return m;
     }();
     auto it = byNrpn.find (nrpn);
     return it == byNrpn.end() ? -1 : it->second;
+}
+
+std::vector<NrpnValue> nrpnValues (const ParamDef& p, int value)
+{
+    if (p.nrpn2 < 0)
+        return { { p.nrpn, value } };
+    // Off: 7 = 0, 107 = 0; Saw: 7 = 1, 107 = 0; Ramp: 7 = 1, 107 = 1
+    return { { p.nrpn, value > 0 ? 1 : 0 }, { p.nrpn2, value > 1 ? 1 : 0 } };
+}
+
+int valueFromBytes (const ParamDef& p, int atNrpn, int atNrpn2)
+{
+    if (p.nrpn2 < 0)
+        return atNrpn;
+    return atNrpn == 0 ? 0 : (atNrpn2 == 0 ? 1 : 2);
+}
+
+int valueAfterNrpn (const ParamDef& p, int current, int nrpn, int nrpnValue)
+{
+    if (p.nrpn2 < 0)
+        return nrpnValue;
+    auto now = nrpnValues (p, current);
+    int on = now[0].value, rising = now[1].value;
+    if (nrpn == p.nrpn)
+        on = nrpnValue;
+    else if (nrpn == p.nrpn2)
+        rising = nrpnValue;
+    // The synth sends 107 = 1 only while the saw is on; on its own it does not switch the saw on.
+    return valueFromBytes (p, on, rising);
 }
 
 std::string formatValue (const ParamDef& p, int value)

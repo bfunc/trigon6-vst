@@ -103,8 +103,11 @@ void Trigon6Processor::timerCallback()
         if (e.channel != ch)
             continue;
         const int i = t6::indexOfNrpn (e.param);
-        if (i >= 0)
-            applyFromSynth ((size_t) i, juce::jlimit (table[(size_t) i].min, table[(size_t) i].max, e.value));
+        if (i < 0)
+            continue;
+        const auto& p = table[(size_t) i];
+        const int current = (int) std::lround (raw[(size_t) i]->load()) + (p.kind == t6::Kind::Choice ? p.min : 0);
+        applyFromSynth ((size_t) i, juce::jlimit (p.min, p.max, t6::valueAfterNrpn (p, current, e.param, e.value)));
     }
 }
 
@@ -137,12 +140,12 @@ void Trigon6Processor::applySound (const std::vector<uint8_t>& data)
     for (size_t i = 0; i < table.size(); ++i)
     {
         const auto& p = table[i];
-        if (p.nrpn < 0 || (size_t) p.nrpn >= data.size() || p.max > 255)
+        if (p.nrpn < 0 || (size_t) p.nrpn >= data.size() || (p.nrpn2 >= 0 && (size_t) p.nrpn2 >= data.size()) || p.max > 255)
         {
             skipped.add (p.name);
             continue;
         }
-        const int v = data[(size_t) p.nrpn];
+        const int v = t6::valueFromBytes (p, data[(size_t) p.nrpn], p.nrpn2 >= 0 ? data[(size_t) p.nrpn2] : 0);
         if (v < p.min || v > p.max)
         {
             outOfRange.add (juce::String (p.name) + " " + juce::String (v));
@@ -202,8 +205,11 @@ void Trigon6Processor::runQueue (Emit&& emit)
     const int ch = midiChannel.load();
     queue.collect (juce::Time::getMillisecondCounterHiRes(), [&] (size_t i, int value)
     {
-        emit (ch, table[i].nrpn, value);
-        ++sentCount;
+        for (const auto& nv : t6::nrpnValues (table[i], value))
+        {
+            emit (ch, nv.nrpn, nv.value);
+            ++sentCount;
+        }
     });
 }
 
