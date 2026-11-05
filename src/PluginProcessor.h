@@ -11,7 +11,7 @@
 // Holds the Trigon-6 program parameters (built from t6::paramTable()) and sends every change as NRPN,
 // either on the plugin's MIDI output (host mode, the default in a DAW) or straight to the synth's port
 // (direct mode, the default in the standalone app). It makes no sound.
-class Trigon6Processor : public juce::AudioProcessor
+class Trigon6Processor : public juce::AudioProcessor, private juce::Timer
 {
 public:
     Trigon6Processor();
@@ -56,6 +56,7 @@ private:
     template <typename Emit>
     void runQueue (Emit&& emit);  // the caller holds queueLock
     void pumpDirect();             // pump thread: direct mode sending
+    void timerCallback() override;  // message thread: takes knob moves the synth sent
 
     struct Pump : juce::Thread
     {
@@ -82,6 +83,7 @@ private:
     std::atomic<bool> sendAllRequested { false };
     std::atomic<bool> needsPrime { true };  // after load: take current values as "already on the synth"
     std::atomic<int> sentCount { 0 };
+    uint32_t incomingSeen = 0;  // message thread: last SynthLink::readIncoming seq applied
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Trigon6Processor)
 };

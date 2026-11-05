@@ -386,7 +386,26 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
     {
         state.globalNrpn[ev->param] = ev->value;
         state.globalNrpnMs[ev->param] = t;
+        return;
     }
+    ++inSeq;
+    inEvents[inSeq % inEvents.size()] = { inSeq, m.getChannel(), ev->param, ev->value };
+}
+
+uint32_t SynthLink::incomingSeq() const
+{
+    const juce::ScopedLock sl (stateLock);
+    return inSeq;
+}
+
+uint32_t SynthLink::readIncoming (uint32_t afterSeq, std::vector<InEvent>& out) const
+{
+    const juce::ScopedLock sl (stateLock);
+    // Fell behind by more than the ring holds: skip what was overwritten.
+    uint32_t from = inSeq - afterSeq > inEvents.size() ? inSeq - (uint32_t) inEvents.size() : afterSeq;
+    for (uint32_t s = from + 1; s <= inSeq; ++s)
+        out.push_back (inEvents[s % inEvents.size()]);
+    return inSeq;
 }
 
 t6::LinkSnapshot SynthLink::snapshot (int pluginChannel) const

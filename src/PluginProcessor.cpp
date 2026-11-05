@@ -62,10 +62,45 @@ Trigon6Processor::Trigon6Processor()
 
     // The standalone app talks to the synth's port itself; in a DAW the host routes the plugin's MIDI out.
     setHostOutput (! isStandalone());
+    incomingSeen = link->incomingSeq();
     pump.startThread();
+    startTimerHz (30);
 }
 
-Trigon6Processor::~Trigon6Processor() { pump.stopThread (1000); }
+Trigon6Processor::~Trigon6Processor()
+{
+    stopTimer();
+    pump.stopThread (1000);
+}
+
+void Trigon6Processor::timerCallback()
+{
+    std::vector<SynthLink::InEvent> events;
+    incomingSeen = link->readIncoming (incomingSeen, events);
+    if (events.empty())
+        return;
+
+    const auto& table = t6::paramTable();
+    const int ch = midiChannel.load();
+    // Under queueLock, so the sender sees the new value and the synced mark together and sends nothing back.
+    const juce::ScopedLock sl (queueLock);
+    for (const auto& e : events)
+    {
+        if (e.channel != ch)
+            continue;
+        const int i = t6::indexOfNrpn (e.param);
+        if (i < 0)
+            continue;
+        const auto& p = table[(size_t) i];
+        const int v = juce::jlimit (p.min, p.max, e.value);
+        queue.markSynced ((size_t) i, v);
+        if (auto* param = apvts.getParameter (p.id))
+        {
+            const float plain = (float) (p.kind == t6::Kind::Choice ? v - p.min : v);
+            param->setValueNotifyingHost (param->convertTo0to1 (plain));
+        }
+    }
+}
 
 void Trigon6Processor::setHostOutput (bool host)
 {

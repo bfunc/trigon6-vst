@@ -16,6 +16,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -49,6 +50,17 @@ public:
     void drainHostOutput (juce::MidiBuffer&);
 
     t6::LinkSnapshot snapshot (int pluginChannel) const;
+
+    // NRPN the synth sent (a knob turned on the panel, with Param Xmit = NR), numbered in arrival order.
+    // Every plugin copy reads them on its own: pass the last seq it saw, get the newer events and the new
+    // last seq. Echoes of what the plugin sent are not included.
+    struct InEvent
+    {
+        uint32_t seq = 0;
+        int channel = 0, param = -1, value = 0;
+    };
+    uint32_t readIncoming (uint32_t afterSeq, std::vector<InEvent>& out) const;
+    uint32_t incomingSeq() const;
 
 private:
     SynthLink();
@@ -87,6 +99,9 @@ private:
     size_t sentNext = 0;
 
     std::array<t6::NrpnDecoder, 16> decoders;  // MIDI thread only
+
+    std::array<InEvent, 256> inEvents;  // ring, guarded by stateLock
+    uint32_t inSeq = 0;                 // seq of the newest event, guarded by stateLock
 
     int probeStep = -1;  // message thread: next request of a running Check
     int ticks = 0;
