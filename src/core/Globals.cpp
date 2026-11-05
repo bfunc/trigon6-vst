@@ -76,34 +76,44 @@ const GlobalDef* globalAt (int row, int button)
     return nullptr;
 }
 
-std::string globalHelp (const GlobalDef& g)
+GlobalInfo globalInfo (const GlobalDef& g)
 {
     const std::string n = g.name;
-    if (n == "Transpose")    return "Shifts the whole synth up or down in semitones (-12 to +12).";
-    if (n == "Master Tune")  return "Fine-tunes the whole synth in cents (-50 to +50).";
-    if (n == "MIDI Channel") return "The channel the synth sends and receives on. All: it receives on every channel.";
-    if (n == "MIDI Clock")   return "Off: no clock. Out: sends its clock. In: follows an incoming clock. "
-                                    "i-0: follows an incoming clock and sends it on. nSS: follows an incoming clock, ignores start/stop.";
-    if (n == "Clock Port")   return "Where the clock comes in and goes out. MID: the 5-pin MIDI ports. USB: the USB port.";
-    if (n == "Param Xmit")   return "How the synth sends knob and button moves. Off: not at all. CC: as control changes. "
-                                    "NR: as NRPN (this plugin needs NR). CAS, nAS: further CC / NRPN variants of the synth.";
-    if (n == "Param Rcv")    return "Which messages change the sound when they come in. Off, CC, or NR: NRPN (this plugin sends NRPN).";
-    if (n == "MIDI Control") return "On: the synth reacts to MIDI controllers such as mod wheel, pitch bend and sustain.";
-    if (n == "MIDI SysEx")   return "Which port carries SysEx (sound and settings dumps). MID: 5-pin MIDI. USB: the USB port "
-                                    "(this plugin needs USB).";
-    if (n == "MIDI Out")     return "Where MIDI goes out. MID: 5-pin MIDI. USB: the USB port. btH: both. PLY: poly chain.";
-    if (n == "Local Ctrl")   return "On: the panel plays the voices directly. Off: the panel only sends MIDI (for a DAW that sends it back).";
-    if (n == "Seq Jack")     return "What the sequencer jack on the back does. NOR: normal; Tri: trigger; Gat: gate; T-g: trigger and gate.";
-    if (n == "Pot Mode")     return "What a knob does when its position and the sound differ. Rel: relative; "
-                                    "Pas: passthrough (takes over when it passes the stored value); Jup: jumps to the knob.";
-    if (n == "Sustain +/-")  return "The sustain pedal's polarity. Nor and Rev, plus n-r and r-n for a pedal of the other kind.";
-    if (n == "Alt Tuning")   return "Nor: equal temperament. 1-16: one of the alternative tunings.";
-    if (n == "Vel Response") return "The velocity curve: how hard you play maps to the velocity the voices get.";
-    if (n == "AT Response")  return "The aftertouch curve.";
-    if (n == "Stereo/Mono")  return "Ste: stereo outputs. Mon: the same mono mix on both outputs.";
-    if (n == "Pgm Dump")     return "An action, not a setting: sends every program as SysEx (for a backup).";
-    if (n == "Beat Sync")    return "Not in the manual's NRPN list; the plugin cannot read it.";
-    return "";
+    if (n == "Transpose")    return { "Shifts the whole synth up or down in semitones.", { "-12 to +12 semitones; 0 = no shift" } };
+    if (n == "Master Tune")  return { "Fine-tunes the whole synth.", { "-50 to +50 cents; 0 = concert pitch" } };
+    if (n == "MIDI Channel") return { "The channel the synth sends and receives on. This plugin sends on its own channel (top right).",
+                                      { "All: receives on every channel", "1-16: one channel" } };
+    if (n == "MIDI Clock")   return { "Whether the arpeggiator and sequencer run on their own clock or follow another device.",
+                                      { "Off: own clock, sends none", "Out: own clock, sends it", "In: follows an incoming clock",
+                                        "i-0: follows an incoming clock and sends it on", "nSS: follows an incoming clock, ignores start / stop" } };
+    if (n == "Clock Port")   return { "Where the clock comes in and goes out.", { "MID: the 5-pin MIDI ports", "USB: the USB port" } };
+    if (n == "Param Xmit")   return { "How the synth sends knob and button moves. This plugin needs NR.",
+                                      { "Off: sends nothing", "CC: control changes", "NR: NRPN (full resolution)",
+                                        "CAS: CC, with more of the panel (not checked yet)", "nAS: NRPN, with more of the panel (not checked yet)" } };
+    if (n == "Param Rcv")    return { "Which incoming messages change the sound. This plugin sends NRPN, so it needs NR.",
+                                      { "Off: none", "CC: control changes", "NR: NRPN" } };
+    if (n == "MIDI Control") return { "Whether the synth reacts to MIDI controllers: mod wheel, pitch bend, sustain and the like.",
+                                      { "Off: ignores them", "On: reacts to them" } };
+    if (n == "MIDI SysEx")   return { "Which port carries SysEx: sound and settings dumps. This plugin needs USB to read sounds and presets.",
+                                      { "MID: the 5-pin MIDI ports", "USB: the USB port" } };
+    if (n == "MIDI Out")     return { "Where the synth's MIDI goes out. This plugin needs USB (or btH).",
+                                      { "MID: the 5-pin MIDI out", "USB: the USB port", "btH: both", "PLY: poly chain (voices shared with a second unit)" } };
+    if (n == "Local Ctrl")   return { "Whether the panel plays the voices directly.",
+                                      { "Off: the panel only sends MIDI (for a DAW that sends it back)", "On: the panel plays the voices" } };
+    if (n == "Seq Jack")     return { "What the sequencer jack on the back does.",
+                                      { "NOR: normal", "Tri: trigger", "Gat: gate", "T-g: trigger and gate" } };
+    if (n == "Pot Mode")     return { "What a knob does when its position and the stored sound differ.",
+                                      { "Rel: relative, moves from the stored value", "Pas: passthrough, takes over when it passes the stored value",
+                                        "Jup: jumps to the knob's position" } };
+    if (n == "Sustain +/-")  return { "The sustain pedal's polarity.",
+                                      { "Nor: normal", "Rev: reversed", "n-r, r-n: for a pedal of the other kind" } };
+    if (n == "Alt Tuning")   return { "The tuning the voices play in.", { "Nor: equal temperament", "1-16: one of the alternative tunings" } };
+    if (n == "Vel Response") return { "The velocity curve: how hard you play maps to the velocity the voices get.", { "A number: one of the curves" } };
+    if (n == "AT Response")  return { "The aftertouch curve.", { "A number: one of the curves" } };
+    if (n == "Stereo/Mono")  return { "The outputs.", { "Ste: stereo", "Mon: the same mono mix on both outputs" } };
+    if (n == "Pgm Dump")     return { "An action, not a setting: sends every program as SysEx (for a backup).", {} };
+    if (n == "Beat Sync")    return { "Not in the manual's NRPN list; the plugin cannot read it.", {} };
+    return {};
 }
 
 std::string globalValueName (const GlobalDef& g, int raw)

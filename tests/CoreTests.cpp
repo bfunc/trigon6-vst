@@ -304,7 +304,13 @@ static void testSysexReplies()
 static void testGlobals()
 {
     for (const auto& g : globalTable())
-        CHECK (! globalHelp (g).empty());
+    {
+        const auto info = globalInfo (g);
+        CHECK (! info.about.empty());
+        // a value list names every value the synth shows (Alt Tuning's 1-16 share one line)
+        if (! g.values.empty() && g.values.size() < 6)
+            CHECK (info.values.size() >= g.values.size() - 1);
+    }
     std::set<std::pair<int, int>> places;
     for (const auto& gl : globalTable())
     {

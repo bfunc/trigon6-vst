@@ -11,7 +11,7 @@
 #include "PluginProcessor.h"
 #include "core/Connection.h"
 
-class ConnectionPage : public juce::Component, public juce::TooltipClient, private juce::Timer
+class ConnectionPage : public juce::Component, private juce::Timer
 {
 public:
     explicit ConnectionPage (Trigon6Processor&);
@@ -20,7 +20,9 @@ public:
     void resized() override;
 
     const t6::Report& getReport() const { return report; }
-    juce::String getTooltip() override;  // over a Globals button: both of its settings, explained
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
+    void mouseDown (const juce::MouseEvent&) override;
     std::function<void()> onReportChanged;
 
 private:
@@ -43,6 +45,8 @@ private:
 
     juce::Rectangle<int> checklistArea, globalsArea;
     std::array<juce::Rectangle<float>, 10> globalCells;  // where paintGlobals drew the buttons
+    int globalAtMouse (juce::Point<float>) const;
+    int hoverButton = -1, clickedButton = -1;  // the info box explains the hovered button, else the clicked one
     // Monitor: every NRPN the synth sends, newest first (to find what a panel control sends).
     juce::Label monitorTitle;
     juce::TextEditor monitor;

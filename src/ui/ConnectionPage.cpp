@@ -325,7 +325,7 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
         auto tl = layoutText ("How to change a setting",
                               "1. Press GLOBALS once (red LED). 2. Press the program button 0-9 of the setting.\n"
                               "3. BANK steps the value up, TENS steps it down.  4. Press GLOBALS to leave.\n"
-                              "Pressing GLOBALS twice (yellow LED) gives a second set of settings: hover over a button to see both.",
+                              "Hover over a button or click it: the box below explains it.",
                               (float) r.getWidth());
         tl.draw (g, r.removeFromTop ((int) std::ceil (tl.getHeight())).toFloat());
     }
@@ -347,7 +347,7 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
     footerTl.draw (g, footerArea.toFloat());
     r.removeFromBottom (8);
 
-    // The settings with GLOBALS pressed once; the second set (pressed twice) is in each button's hover help.
+    // The settings with GLOBALS pressed once; the info box below explains the hovered or clicked button.
     const int rowH = juce::jmin (r.getHeight(), 190);
     {
         const int row = 0;
@@ -362,7 +362,8 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
             const auto health = def != nullptr ? t6::globalHealth (snap, *def) : t6::Health::Unknown;
 
             const bool highlighted = row == report.highlightRow && b == report.highlightButton;
-            g.setColour (highlighted ? theme::section.brighter (0.25f) : theme::background);
+            const bool shown = b == (hoverButton >= 0 ? hoverButton : clickedButton);
+            g.setColour (highlighted ? theme::section.brighter (0.25f) : shown ? theme::section.brighter (0.12f) : theme::background);
             g.fillRoundedRectangle (c, 5.0f);
             g.setColour (highlighted ? theme::text : required ? colourOf (health) : theme::border);
             g.drawRoundedRectangle (c, 5.0f, highlighted ? 4.0f : required ? 2.5f : 1.0f);
@@ -397,28 +398,71 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
             }
         }
     }
+
+    // Info box: the hovered (or clicked) button's setting and its values
+    r.removeFromTop (10);
+    auto info = r.reduced (3, 0);
+    g.setColour (theme::background);
+    g.fillRoundedRectangle (info.toFloat(), 5.0f);
+    info = info.reduced (12, 10);
+    const int b = hoverButton >= 0 ? hoverButton : clickedButton;
+    const auto* def = b >= 0 ? t6::globalAt (0, b) : nullptr;
+    juce::AttributedString as;
+    as.setWordWrap (juce::AttributedString::byWord);
+    as.setJustification (juce::Justification::topLeft);
+    if (def == nullptr)
+        as.append ("Hover over a button or click it to see what the setting does and what its values mean.",
+                   juce::FontOptions (13.5f), theme::dim);
+    else
+    {
+        const auto gi = t6::globalInfo (*def);
+        as.append (juce::String (b) + "  " + def->name + "\n", juce::FontOptions (16.0f, juce::Font::bold), theme::text);
+        as.append (juce::String (gi.about) + "\n", juce::FontOptions (13.5f), theme::text);
+        for (const auto& v : gi.values)
+            as.append ("    " + juce::String (v) + "\n", juce::FontOptions (13.5f), theme::text);
+        const auto reading = def->nrpn >= 0 ? t6::readGlobal (snap, def->nrpn) : t6::GlobalReading {};
+        as.append ("Now: " + (reading.known ? juce::String (reading.text) : juce::String ("not known yet")) + "\n",
+                   juce::FontOptions (13.5f, juce::Font::bold), reading.known ? theme::ok : theme::dim);
+        if (const auto* second = t6::globalAt (1, b))
+            as.append (juce::String ("\nGLOBALS pressed twice (yellow LED), button ") + juce::String (b) + ": " + second->name + ". "
+                           + juce::String (t6::globalInfo (*second).about),
+                       juce::FontOptions (12.5f), theme::dim);
+    }
+    juce::TextLayout tl;
+    tl.createLayout (as, (float) info.getWidth());
+    tl.draw (g, info.toFloat());
 }
 
-juce::String ConnectionPage::getTooltip()
+int ConnectionPage::globalAtMouse (juce::Point<float> pos) const
 {
-    const auto pos = getMouseXYRelative().toFloat();
     for (int b = 0; b < 10; ++b)
+        if (globalCells[(size_t) b].contains (pos))
+            return b;
+    return -1;
+}
+
+void ConnectionPage::mouseMove (const juce::MouseEvent& e)
+{
+    const int b = globalAtMouse (e.position);
+    if (b != hoverButton)
     {
-        if (! globalCells[(size_t) b].contains (pos))
-            continue;
-        juce::String tip = "Button " + juce::String (b);
-        for (int row = 0; row < 2; ++row)
-        {
-            const auto* def = t6::globalAt (row, b);
-            if (def == nullptr)
-                continue;
-            tip << "\n\n" << (row == 0 ? "GLOBALS once (red LED): " : "GLOBALS twice (yellow LED): ") << def->name << "\n"
-                << juce::String (t6::globalHelp (*def));
-            const auto reading = def->nrpn >= 0 ? t6::readGlobal (snap, def->nrpn) : t6::GlobalReading {};
-            if (reading.known)
-                tip << "\nNow: " << juce::String (reading.text);
-        }
-        return tip;
+        hoverButton = b;
+        repaint (globalsArea);
     }
-    return {};
+}
+
+void ConnectionPage::mouseExit (const juce::MouseEvent&)
+{
+    hoverButton = -1;
+    repaint (globalsArea);
+}
+
+void ConnectionPage::mouseDown (const juce::MouseEvent& e)
+{
+    const int b = globalAtMouse (e.position);
+    if (b >= 0)
+    {
+        clickedButton = b;
+        repaint (globalsArea);
+    }
 }
