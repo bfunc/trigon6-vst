@@ -7,6 +7,15 @@
 namespace t6
 {
 
+namespace
+{
+std::string hexByte (int b)
+{
+    static const char* hex = "0123456789ABCDEF";
+    return std::string { hex[(b >> 4) & 0x0F], hex[b & 0x0F] };
+}
+} // namespace
+
 bool isParameterCc (int cc)
 {
     switch (cc)
@@ -287,6 +296,14 @@ Report evaluate (const LinkSnapshot& s)
         sx.health = txOk ? Health::Bad : Health::Warn;
         sx.detail = "No dump arrived.";
         sx.fix = txOk ? globalFix (kGlobalSysex, "USB") : "First find out whether the synth gets anything: Play test note.";
+        const auto sysex = readGlobal (s, kGlobalSysex);
+        if (txOk && sysex.known && sysex.source != Source::Dump && sysex.raw == 1)
+        {
+            // The setting is right, so the synth ignored the request itself.
+            sx.detail = "MIDI SysEx is USB, but the synth did not answer the dump request.";
+            sx.fix = "Press Check again. If it stays red, send the developer the inquiry reply"
+                     + std::string (s.device.raw.empty() ? "." : ": " + s.device.raw);
+        }
     }
     else
     {
@@ -393,8 +410,17 @@ Report evaluate (const LinkSnapshot& s)
                        std::to_string (s.echoCount) + " messages the plugin sent came straight back.",
                        "Don't route the Trigon's input back to its output (in FL: MIDI thru, or a MIDI Out channel on the same port)." });
     if (s.inquiryMs >= 0 && ! s.device.isTrigon6)
-        w.push_back ({ Health::Warn, "Not a Trigon-6", "The device on this port answered, but not as a Trigon-6. Reply: " + s.device.raw,
-                       "Pick the synth's ports above. If it is the Trigon, send this reply to the developer." });
+    {
+        if (s.device.manufacturer == 0x01)
+            w.push_back ({ Health::Warn, "Unexpected model ID",
+                           "A Sequential synth answered with model " + hexByte (s.device.family)
+                               + " (expected 2D). Dump requests now use its ID. Reply: " + s.device.raw,
+                           "If this is the Trigon-6, send this reply to the developer." });
+        else
+            w.push_back ({ Health::Warn, "Not a Trigon-6",
+                           "The device on this port answered, but not as a Trigon-6. Reply: " + s.device.raw,
+                           "Pick the synth's ports above." });
+    }
     auto known = [&] (int nrpn, std::initializer_list<int> raws)
     {
         const auto r = readGlobal (s, nrpn);

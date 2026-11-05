@@ -249,6 +249,9 @@ static void testSysexReplies()
     auto info = parseDeviceInquiryReply (inq.data(), inq.size());
     CHECK (info && info->isTrigon6 && info->versionMajor == 1 && info->versionMinor == 2);
     CHECK (info->raw == "7E 7F 06 02 01 2D 01 00 00 21");
+    CHECK (info->manufacturer == 0x01 && info->family == 0x2D);
+    // another model byte: requests and parsing follow the id they are given
+    CHECK ((requestGlobals (0x3A) == std::vector<uint8_t> { 0xF0, 0x01, 0x3A, 0x0E, 0xF7 }));
     CHECK (classifySysex (inq.data(), inq.size()) == SysexKind::DeviceInquiryReply);
     CHECK (classifySysex (inq.data() + 1, inq.size() - 2) == SysexKind::DeviceInquiryReply);  // JUCE strips F0/F7
 
@@ -333,6 +336,21 @@ static void testConnection()
     auto rep = evaluate (s);
     CHECK (rep.allOk && rep.verdict == "Connected." && rep.highlightButton < 0);
     CHECK (rep.steps.size() == 8);
+
+    {
+        // SysEx is USB (the synth said so) and the inquiry came back, but no dump: the request was ignored
+        auto q = connectedSnapshot();
+        q.globalsMs = q.editBufferMs = -1;
+        q.globalsDump.clear();
+        q.device.isTrigon6 = false;
+        q.device.manufacturer = 0x01;
+        q.device.family = 0x3A;
+        q.device.raw = "7E 00 06 02 01 3A";
+        const auto r = evaluate (q);
+        CHECK (step (r, kSysex).health == Health::Bad);
+        CHECK (step (r, kSysex).detail.find ("did not answer") != std::string::npos);
+        CHECK (! r.warnings.empty() && r.warnings[0].title == "Unexpected model ID");
+    }
 
     // priority: the synth's NRPN, then proof, then the dump
     CHECK (readGlobal (s, 1032).source == Source::Nrpn);

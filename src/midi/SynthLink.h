@@ -71,6 +71,7 @@ private:
 
     std::atomic<bool> hostOutput { false };
     std::atomic<bool> outputOpen { false };
+    std::atomic<int> sysexId { 0x2D };  // the model byte for requests; learned from the inquiry reply
 
     juce::SpinLock hostLock;
     std::vector<juce::MidiMessage> hostPending;

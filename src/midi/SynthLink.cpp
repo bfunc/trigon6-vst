@@ -228,8 +228,8 @@ void SynthLink::timerCallback()
             sendSysex (t6::requestDeviceInquiry());
             break;
         }
-        case 1: sendSysex (t6::requestGlobals()); break;
-        default: sendSysex (t6::requestEditBuffer()); break;
+        case 1: sendSysex (t6::requestGlobals ((uint8_t) sysexId.load())); break;
+        default: sendSysex (t6::requestEditBuffer ((uint8_t) sysexId.load())); break;
     }
     probeStep = probeStep < 2 ? probeStep + 1 : -1;
 }
@@ -309,16 +309,20 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
     {
         const auto* d = m.getSysExData();
         const auto n = (size_t) m.getSysExDataSize();
+        const auto id = (uint8_t) sysexId.load();
         const juce::ScopedLock sl (stateLock);
         state.lastAnyInMs = t;
-        switch (t6::classifySysex (d, n))
+        switch (t6::classifySysex (d, n, id))
         {
             case t6::SysexKind::DeviceInquiryReply:
                 state.device = *t6::parseDeviceInquiryReply (d, n);
                 state.inquiryMs = t;
+                // A Sequential synth: address the dump requests to the model it reports.
+                if (state.device.manufacturer == t6::kDsiId && state.device.family > 0)
+                    sysexId = state.device.family;
                 break;
             case t6::SysexKind::GlobalDump:
-                if (auto g = t6::parseGlobalDump (d, n))
+                if (auto g = t6::parseGlobalDump (d, n, id))
                 {
                     state.globalsDump = *g;
                     state.globalsMs = t;
@@ -326,7 +330,7 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
                 break;
             case t6::SysexKind::EditBufferDump:
                 state.editBufferSize = n + 2;
-                state.editBufferOk = t6::parseProgramDump (d, n).has_value();
+                state.editBufferOk = t6::parseProgramDump (d, n, id).has_value();
                 state.editBufferMs = t;
                 break;
             default: break;

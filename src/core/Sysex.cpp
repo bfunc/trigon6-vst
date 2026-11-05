@@ -5,16 +5,16 @@
 namespace t6
 {
 
-std::vector<uint8_t> requestEditBuffer() { return { 0xF0, kDsiId, kTrigon6Id, 0x06, 0xF7 }; }
+std::vector<uint8_t> requestEditBuffer (uint8_t id) { return { 0xF0, kDsiId, id, 0x06, 0xF7 }; }
 
-std::vector<uint8_t> requestProgram (int bank, int program)
+std::vector<uint8_t> requestProgram (int bank, int program, uint8_t id)
 {
-    return { 0xF0, kDsiId, kTrigon6Id, 0x05, (uint8_t) (bank & 0x7F), (uint8_t) (program & 0x7F), 0xF7 };
+    return { 0xF0, kDsiId, id, 0x05, (uint8_t) (bank & 0x7F), (uint8_t) (program & 0x7F), 0xF7 };
 }
 
 std::vector<uint8_t> requestDeviceInquiry() { return { 0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7 }; }
 
-std::vector<uint8_t> requestGlobals() { return { 0xF0, kDsiId, kTrigon6Id, 0x0E, 0xF7 }; }
+std::vector<uint8_t> requestGlobals (uint8_t id) { return { 0xF0, kDsiId, id, 0x0E, 0xF7 }; }
 
 namespace
 {
@@ -34,6 +34,11 @@ std::optional<DeviceInfo> parseDeviceInquiryReply (const uint8_t* msg, size_t si
         return std::nullopt;
     DeviceInfo info;
     info.isTrigon6 = size >= 6 && msg[4] == kDsiId && msg[5] == kTrigon6Id;
+    if (size >= 6)
+    {
+        info.manufacturer = msg[4];
+        info.family = msg[5];
+    }
     static const char* hex = "0123456789ABCDEF";
     for (size_t i = 0; i < size && i < 32; ++i)
     {
@@ -50,10 +55,10 @@ std::optional<DeviceInfo> parseDeviceInquiryReply (const uint8_t* msg, size_t si
     return info;
 }
 
-std::optional<std::vector<int>> parseGlobalDump (const uint8_t* msg, size_t size)
+std::optional<std::vector<int>> parseGlobalDump (const uint8_t* msg, size_t size, uint8_t id)
 {
     strip (msg, size);
-    if (size != 3 + 2 * kGlobalCount || msg[0] != kDsiId || msg[1] != kTrigon6Id || msg[2] != 0x0F)
+    if (size != 3 + 2 * kGlobalCount || msg[0] != kDsiId || msg[1] != id || msg[2] != 0x0F)
         return std::nullopt;
     std::vector<int> values (kGlobalCount);
     for (size_t i = 0; i < kGlobalCount; ++i)
@@ -61,12 +66,12 @@ std::optional<std::vector<int>> parseGlobalDump (const uint8_t* msg, size_t size
     return values;
 }
 
-SysexKind classifySysex (const uint8_t* msg, size_t size)
+SysexKind classifySysex (const uint8_t* msg, size_t size, uint8_t id)
 {
     if (parseDeviceInquiryReply (msg, size))
         return SysexKind::DeviceInquiryReply;
     strip (msg, size);
-    if (size < 3 || msg[0] != kDsiId || msg[1] != kTrigon6Id)
+    if (size < 3 || msg[0] != kDsiId || msg[1] != id)
         return SysexKind::Other;
     switch (msg[2])
     {
@@ -77,11 +82,11 @@ SysexKind classifySysex (const uint8_t* msg, size_t size)
     }
 }
 
-std::optional<std::vector<uint8_t>> parseProgramDump (const uint8_t* msg, size_t size)
+std::optional<std::vector<uint8_t>> parseProgramDump (const uint8_t* msg, size_t size, uint8_t id)
 {
     strip (msg, size);
 
-    if (size < 3 || msg[0] != kDsiId || msg[1] != kTrigon6Id)
+    if (size < 3 || msg[0] != kDsiId || msg[1] != id)
         return std::nullopt;
 
     const size_t header = msg[2] == 0x03 ? 3 : msg[2] == 0x02 ? 5 : 0;
