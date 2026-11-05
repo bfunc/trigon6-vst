@@ -55,7 +55,14 @@ target_sources(Trigon6Control PRIVATE
     src/PluginEditor.cpp
     src/midi/SynthLink.cpp
     src/ui/ConnectionPage.cpp
-    src/ui/PresetsPage.cpp)
+    src/ui/PresetsPage.cpp
+    src/ui/HardwareLook.cpp)
+
+# Panel fonts (SIL Open Font License, see assets/fonts/OFL-*.txt), compiled in as BinaryData.
+juce_add_binary_data(t6_fonts SOURCES
+    assets/fonts/Michroma-Regular.ttf
+    assets/fonts/ShareTechMono-Regular.ttf)
+set_target_properties(t6_fonts PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(Trigon6Control PRIVATE src)
 
@@ -69,6 +76,7 @@ target_compile_definitions(Trigon6Control PUBLIC
 target_link_libraries(Trigon6Control
     PRIVATE
         t6_core
+        t6_fonts
         juce::juce_audio_utils
         juce::juce_audio_devices
     PUBLIC

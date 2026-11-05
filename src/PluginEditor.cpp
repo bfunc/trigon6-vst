@@ -2,17 +2,22 @@
 
 #include "core/ParamTable.h"
 #include "ui/ConnectionPage.h"
+#include "ui/HardwareLook.h"
 #include "ui/PanelLayout.h"
 #include "ui/PresetsPage.h"
 #include "ui/Theme.h"
 
 #include <cstring>
+#include <set>
 
 namespace
 {
 using APVTS = juce::AudioProcessorValueTreeState;
 
 namespace colours = theme;
+
+constexpr int kWood = 18;      // the wooden end cheeks, left and right
+constexpr int kTopBar = 56;
 
 const t6::ParamDef* findParam (const std::string& id)
 {
@@ -22,6 +27,21 @@ const t6::ParamDef* findParam (const std::string& id)
     return nullptr;
 }
 
+// How a choice parameter is shown: LEDs in a column (like the LFO shape), LEDs in a row with their names above
+// (like the oscillator octave), or a red window you click for a menu (effect type, glide mode, ...).
+enum class ChoiceStyle { LedColumn, LedRow, Window };
+
+ChoiceStyle choiceStyle (const std::string& id)
+{
+    static const std::set<std::string> column { "lfo_shape", "arp_mode", "arp_octaves" };
+    static const std::set<std::string> row { "osc1_octave", "osc2_octave", "osc3_octave", "filter_keyboard" };
+    if (column.count (id))
+        return ChoiceStyle::LedColumn;
+    if (row.count (id))
+        return ChoiceStyle::LedRow;
+    return ChoiceStyle::Window;
+}
+
 // The label under a control: the section title already says "LFO", "Poly Mod", ... so drop that part.
 juce::String shortName (const t6::ParamDef& p)
 {
@@ -29,12 +49,14 @@ juce::String shortName (const t6::ParamDef& p)
     if (n.contains ("> "))
         return n.fromFirstOccurrenceOf ("> ", false, false);
     if (n.endsWith ("Octave"))
-        return n;  // "Osc 1 Octave" names its oscillator row
+        return "Octave";  // the row number says which oscillator
     for (const char* pre : { "Osc 1 ", "Osc 2 ", "Osc 3 ", "FEnv ", "Amp ", "LFO ", "AT ", "PolyMod ", "Glide ", "Arp " })
         if (n.startsWith (pre))
             return n.substring ((int) std::strlen (pre));
     if (n.startsWith ("FX "))
         return n.substring (3);  // "A Type", "B Dry/Wet"
+    if (n == "Feedback<>Drive")
+        return juce::String::fromUTF8 ("Fdbk \xe2\x80\xb9\xe2\x80\xba Drive");
     return n;
 }
 
@@ -52,22 +74,15 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        auto r = getLocalBounds().toFloat().reduced (2.0f);
-        auto top = r.removeFromTop (juce::jmin (34.0f, r.getHeight() * 0.5f));
-        const float cx = top.getCentreX(), gap = 11.0f;
+        auto r = getLocalBounds().toFloat();
+        const float cx = r.getCentreX(), gap = 10.0f;
+        auto top = r.removeFromTop (juce::jmin (30.0f, r.getHeight() * 0.5f));
 
-        auto led = [&] (float x, bool on)
-        {
-            const float d = 9.0f;
-            juce::Rectangle<float> e (x - d / 2, top.getY() + 2.0f, d, d);
-            g.setColour (on ? colours::led : colours::led.withAlpha (0.2f));
-            g.fillEllipse (e);
-        };
-        led (cx - gap, value == 1);
-        led (cx + gap, value == 2);
+        hw::drawLed (g, { cx - gap, top.getY() + 5.0f }, 7.0f, value == 1);
+        hw::drawLed (g, { cx + gap, top.getY() + 5.0f }, 7.0f, value == 2);
 
         // the wave symbols under the LEDs
-        const float y0 = top.getY() + 16.0f, y1 = top.getBottom() - 2.0f, w = 4.0f;
+        const float y0 = top.getY() + 13.0f, y1 = top.getBottom() - 3.0f, w = 4.0f;
         juce::Path saw, ramp;
         saw.startNewSubPath (cx - gap - w, y1);
         saw.lineTo (cx - gap - w, y0);
@@ -75,15 +90,12 @@ public:
         ramp.startNewSubPath (cx + gap - w, y1);
         ramp.lineTo (cx + gap + w, y0);
         ramp.lineTo (cx + gap + w, y1);
-        g.setColour (colours::text);
-        g.strokePath (saw, juce::PathStrokeType (1.5f));
-        g.strokePath (ramp, juce::PathStrokeType (1.5f));
+        g.setColour (hw::col::label);
+        g.strokePath (saw, juce::PathStrokeType (1.3f));
+        g.strokePath (ramp, juce::PathStrokeType (1.3f));
 
-        auto body = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), 44.0f), juce::jmin (r.getHeight(), 30.0f));
-        g.setColour (pressed ? colours::border.brighter (0.3f) : colours::border);
-        g.fillRoundedRectangle (body, 4.0f);
-        g.setColour (colours::background);
-        g.drawRoundedRectangle (body, 4.0f, 1.0f);
+        hw::drawPanelButton (g, r.withSizeKeepingCentre (30.0f, juce::jmin (26.0f, r.getHeight())), value > 0,
+                             isMouseOver(), pressed);
     }
 
     void mouseDown (const juce::MouseEvent&) override
@@ -97,6 +109,8 @@ public:
         pressed = false;
         repaint();
     }
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+    void mouseExit (const juce::MouseEvent&) override { repaint(); }
 
 private:
     juce::ParameterAttachment attachment;
@@ -104,21 +118,87 @@ private:
     bool pressed = false;
 };
 
-// One control on the panel: a big knob, an LED-style toggle, a drop-down, or a placeholder for an unknown NRPN.
+// A choice shown as red LEDs with names; a click on a name (or its LED) picks it, values from the synth light it.
+class LedChoice : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    LedChoice (juce::RangedAudioParameter& p, std::vector<std::string> names, bool asRow)
+        : attachment (p, [this] (float v) { value = juce::roundToInt (v); repaint(); }, nullptr),
+          items (std::move (names)), row (asRow)
+    {
+        attachment.sendInitialUpdate();
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        g.setFont (juce::FontOptions (row ? 10.0f : 11.0f));
+        for (int i = 0; i < (int) items.size(); ++i)
+        {
+            const auto cell = cellBounds (i);
+            const juce::String name (items[(size_t) i]);
+            g.setColour (i == value ? hw::col::label : hw::col::label.withAlpha (0.75f));
+            if (row)
+            {
+                g.drawText (name, cell.withHeight (12.0f), juce::Justification::centred, false);
+                hw::drawLed (g, { cell.getCentreX(), cell.getY() + 19.0f }, 7.0f, i == value);
+            }
+            else
+            {
+                hw::drawLed (g, { cell.getX() + 5.0f, cell.getCentreY() }, 7.0f, i == value);
+                g.drawText (name, cell.withTrimmedLeft (14.0f), juce::Justification::centredLeft, false);
+            }
+        }
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        for (int i = 0; i < (int) items.size(); ++i)
+            if (cellBounds (i).contains (e.position))
+                attachment.setValueAsCompleteGesture ((float) i);
+    }
+
+private:
+    juce::Rectangle<float> cellBounds (int i) const
+    {
+        const auto r = getLocalBounds().toFloat();
+        const int n = juce::jmax (1, (int) items.size());
+        if (row)
+        {
+            const float w = juce::jmin (26.0f, r.getWidth() / (float) n);
+            const float x0 = r.getCentreX() - w * (float) n / 2.0f;
+            return { x0 + w * (float) i, r.getCentreY() - 12.0f, w, 26.0f };
+        }
+        const float h = juce::jmin (15.0f, r.getHeight() / (float) n);
+        const float y0 = r.getCentreY() - h * (float) n / 2.0f;
+        return { r.getX(), y0 + h * (float) i, r.getWidth(), h };
+    }
+
+    juce::ParameterAttachment attachment;
+    std::vector<std::string> items;
+    bool row;
+    int value = 0;
+};
+
+// One control on the panel: a knob, a glowing toggle, LEDs or a red window, with its name underneath.
 class Cell : public juce::Component, public juce::SettableTooltipClient
 {
 public:
     Cell (APVTS& state, const std::string& cellId)
     {
         label.setJustificationType (juce::Justification::centred);
-        label.setColour (juce::Label::textColourId, colours::text);
-        label.setFont (juce::FontOptions (13.0f));
+        label.setColour (juce::Label::textColourId, hw::col::label);
+        label.setFont (hw::labelFont (10.5f));
+        label.setMinimumHorizontalScale (0.7f);
+        label.setInterceptsMouseClicks (false, false);
         addAndMakeVisible (label);
 
-        if (! cellId.empty() && cellId[0] == '?')
+        if (cellId.empty())
+            return;
+        if (cellId[0] == '?')
         {
-            label.setText (juce::String (cellId.substr (1)) + "\n(NRPN ?)", juce::dontSendNotification);
-            label.setColour (juce::Label::textColourId, colours::dim);
+            label.setText (juce::String (cellId.substr (1)).toUpperCase() + "\n(NRPN ?)", juce::dontSendNotification);
+            label.setColour (juce::Label::textColourId, hw::col::value);
             label.setTooltip ("This control is not in the manual's NRPN table; its number is found from the synth's own NRPN output.");
             return;
         }
@@ -128,16 +208,15 @@ public:
         if (p == nullptr)
             return;
         auto* param = state.getParameter (p->id);
+        label.setText (shortName (*p).toUpperCase(), juce::dontSendNotification);
 
         switch (p->kind)
         {
             case t6::Kind::Bool:
-                button = std::make_unique<juce::TextButton> (shortName (*p));
+                button = std::make_unique<juce::TextButton>();
                 button->setClickingTogglesState (true);
-                button->setColour (juce::TextButton::buttonOnColourId, colours::led);
                 addAndMakeVisible (*button);
                 buttonAttach = std::make_unique<APVTS::ButtonAttachment> (state, p->id, *button);
-                label.setVisible (false);
                 break;
 
             case t6::Kind::Choice:
@@ -145,50 +224,62 @@ public:
                 {
                     sawRamp = std::make_unique<SawRampButton> (*param);
                     addAndMakeVisible (*sawRamp);
-                    label.setText (shortName (*p), juce::dontSendNotification);
+                    break;
+                }
+                if (const auto style = choiceStyle (p->id); style != ChoiceStyle::Window)
+                {
+                    leds = std::make_unique<LedChoice> (*param, p->choices, style == ChoiceStyle::LedRow);
+                    addAndMakeVisible (*leds);
                     break;
                 }
                 combo = std::make_unique<juce::ComboBox>();
+                combo->getProperties().set (hw::windowProperty, true);
+                combo->setColour (juce::ComboBox::textColourId, hw::col::windowText);
                 for (size_t i = 0; i < p->choices.size(); ++i)
                     combo->addItem (p->choices[i], (int) i + 1);
                 addAndMakeVisible (*combo);
                 comboAttach = std::make_unique<APVTS::ComboBoxAttachment> (state, p->id, *combo);
-                label.setText (shortName (*p), juce::dontSendNotification);
                 break;
 
             case t6::Kind::Int:
             case t6::Kind::Bipolar:
                 knob = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow);
-                knob->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 18);
+                knob->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 14);
                 knob->setMouseDragSensitivity (300);
                 addAndMakeVisible (*knob);
                 sliderAttach = std::make_unique<APVTS::SliderAttachment> (state, p->id, *knob);
                 knob->setDoubleClickReturnValue (true, param->convertFrom0to1 (param->getDefaultValue()));
-                label.setText (shortName (*p), juce::dontSendNotification);
                 break;
         }
         setTooltip (juce::String (p->name) + "  (NRPN " + juce::String (p->nrpn)
                     + (p->nrpn2 >= 0 ? " + " + juce::String (p->nrpn2) + "; click steps Off, Saw, Ramp" : juce::String()) + ")");
+        for (auto* c : getChildren())
+            if (auto* t = dynamic_cast<juce::SettableTooltipClient*> (c); t != nullptr && c != &label)
+                t->setTooltip (getTooltip());
     }
 
     void resized() override
     {
-        auto r = getLocalBounds().reduced (3);
-        if (button)
+        auto r = getLocalBounds().reduced (2);
+        if (! knob && ! button && ! combo && ! sawRamp && ! leds)
         {
-            button->setBounds (r.withSizeKeepingCentre (r.getWidth(), juce::jmin (34, r.getHeight())));
+            label.setBounds (r);  // placeholder (or empty slot): text fills the cell
             return;
         }
-        auto labelArea = r.removeFromBottom (18);
-        label.setBounds (labelArea);
-        if (sawRamp)
-            sawRamp->setBounds (r);
+        label.setBounds (r.removeFromBottom (15));
+        if (knob)
+        {
+            const int side = juce::jlimit (20, 62, juce::jmin (r.getWidth(), r.getHeight() - 14));
+            knob->setBounds (r.withSizeKeepingCentre (juce::jmax (side, 56), side + 14));
+        }
+        else if (button)
+            button->setBounds (r.withSizeKeepingCentre (38, 34).withY (r.getBottom() - 36));
+        else if (sawRamp)
+            sawRamp->setBounds (r.withSizeKeepingCentre (juce::jmin (r.getWidth(), 50), juce::jmin (r.getHeight(), 60)));
+        else if (leds)
+            leds->setBounds (r);
         else if (combo)
-            combo->setBounds (r.withSizeKeepingCentre (r.getWidth(), juce::jmin (28, r.getHeight())));
-        else if (knob)
-            knob->setBounds (r);
-        else
-            label.setBounds (getLocalBounds());  // placeholder: text fills the cell
+            combo->setBounds (r.withSizeKeepingCentre (juce::jmin (r.getWidth() - 4, 112), juce::jmin (26, r.getHeight())));
     }
 
 private:
@@ -197,13 +288,15 @@ private:
     std::unique_ptr<juce::TextButton> button;
     std::unique_ptr<juce::ComboBox> combo;
     std::unique_ptr<SawRampButton> sawRamp;
+    std::unique_ptr<LedChoice> leds;
     std::unique_ptr<APVTS::SliderAttachment> sliderAttach;
     std::unique_ptr<APVTS::ButtonAttachment> buttonAttach;
     std::unique_ptr<APVTS::ComboBoxAttachment> comboAttach;
 };
 } // namespace
 
-// A titled box of rows; all rows of a section share one column grid, so the oscillator rows line up.
+// A titled area of rows, divided from its neighbours by thin lines like the synth's panel print; all rows of a
+// section share one column grid, so the oscillator rows line up.
 class SectionPanel : public juce::Component
 {
 public:
@@ -223,22 +316,30 @@ public:
 
     const t6ui::SectionLayout& layout;
 
+    bool isStrip() const { return layout.y >= 0.8f; }  // the bottom performance strip
+
     void paint (juce::Graphics& g) override
     {
-        auto r = getLocalBounds().toFloat().reduced (3.0f);
-        g.setColour (colours::section);
-        g.fillRoundedRectangle (r, 6.0f);
-        g.setColour (colours::border);
-        g.drawRoundedRectangle (r, 6.0f, 1.0f);
-        g.setColour (colours::text);
-        g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
-        g.drawText (juce::String (layout.title).toUpperCase(), r.removeFromTop (24.0f), juce::Justification::centred);
+        auto r = getLocalBounds().toFloat();
+        if (isStrip())
+        {
+            g.setColour (hw::col::strip);
+            g.fillRect (r);
+        }
+        g.setColour (hw::col::line);
+        g.fillRect (r.getRight() - 1.0f, r.getY(), 1.0f, r.getHeight());
+        g.fillRect (r.getX(), r.getBottom() - 1.0f, r.getWidth(), 1.0f);
+
+        g.setColour (hw::col::title);
+        g.setFont (hw::titleFont (titleHeight() * 0.62f));
+        g.drawText (juce::String (layout.title).toUpperCase(), r.removeFromTop ((float) titleHeight()).withTrimmedTop (4.0f),
+                    juce::Justification::centred, false);
     }
 
     void resized() override
     {
-        auto r = getLocalBounds().reduced (8);
-        r.removeFromTop (20);
+        auto r = getLocalBounds().reduced (10, 4);
+        r.removeFromTop (titleHeight() - 2);
         if (rows.empty())
             return;
         const int rowH = r.getHeight() / (int) rows.size();
@@ -252,11 +353,13 @@ public:
     }
 
 private:
+    int titleHeight() const { return isStrip() ? 20 : juce::jlimit (22, 34, getHeight() / 6); }
+
     std::vector<std::vector<std::unique_ptr<Cell>>> rows;
     int columns = 1;
 };
 
-// The synth's front panel: section boxes placed by the fractions in PanelLayout.
+// The synth's front panel: section areas placed by the fractions in PanelLayout, between wooden end cheeks.
 class PanelPage : public juce::Component
 {
 public:
@@ -269,11 +372,16 @@ public:
         }
     }
 
-    void paint (juce::Graphics& g) override { g.fillAll (colours::background); }
+    void paint (juce::Graphics& g) override
+    {
+        const auto r = getLocalBounds().toFloat();
+        g.setGradientFill (juce::ColourGradient (hw::col::panelTop, 0.0f, 0.0f, hw::col::panel, 0.0f, r.getBottom(), false));
+        g.fillRect (r);
+    }
 
     void resized() override
     {
-        const auto area = getLocalBounds().reduced (6).toFloat();
+        const auto area = getLocalBounds().toFloat();
         for (auto& s : sections)
         {
             const auto& l = s->layout;
@@ -310,19 +418,11 @@ private:
 
 Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), proc (p)
 {
-    lnf.setColour (juce::Slider::rotarySliderFillColourId, colours::led);
-    lnf.setColour (juce::Slider::rotarySliderOutlineColourId, colours::border);
-    lnf.setColour (juce::Slider::thumbColourId, colours::text);
-    lnf.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-    lnf.setColour (juce::Slider::textBoxTextColourId, colours::text);
-    setLookAndFeel (&lnf);
+    setLookAndFeel (&look);
 
-    title.setText ("TRIGON-6 CONTROL", juce::dontSendNotification);
-    title.setFont (juce::FontOptions (20.0f, juce::Font::bold));
-    title.setColour (juce::Label::textColourId, colours::text);
-    addAndMakeVisible (title);
-
-    channelLabel.setText ("MIDI channel", juce::dontSendNotification);
+    channelLabel.setText ("MIDI CH", juce::dontSendNotification);
+    channelLabel.setFont (hw::labelFont (12.0f));
+    channelLabel.setColour (juce::Label::textColourId, juce::Colour (0xffb8b8bc));
     channelLabel.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (channelLabel);
     for (int ch = 1; ch <= 16; ++ch)
@@ -338,21 +438,23 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     getSound.setTooltip ("Read the synth's current sound into the plugin (sends nothing that changes the sound)");
     getSound.onClick = [this] { proc.requestGetSound(); };
     addAndMakeVisible (getSound);
-    soundStatus.setColour (juce::Label::textColourId, colours::dim);
+    soundStatus.setColour (juce::Label::textColourId, hw::col::value);
     soundStatus.setMinimumHorizontalScale (0.6f);
     addAndMakeVisible (soundStatus);
 
-    status.setColour (juce::Label::textColourId, colours::dim);
+    status.setColour (juce::Label::textColourId, juce::Colour (0xffb8b8bc));
+    status.setFont (juce::FontOptions (12.0f));
     addAndMakeVisible (status);
 
     // Connection first; the editor opens on it unless the synth is fully connected.
     tabs = std::make_unique<Tabs>();
-    tabs->setTabBarDepth (32);
+    tabs->setTabBarDepth (38);
     tabs->setOutline (0);
+    tabs->setIndent (10);
     auto* connection = new ConnectionPage (proc);
-    tabs->addTab ("Connection", colours::section, connection, true);
-    tabs->addTab ("Panel", colours::section, new PanelPage (proc.apvts), true);
-    tabs->addTab ("Presets", colours::section, new PresetsPage (proc), true);
+    tabs->addTab ("Connection", colours::background, connection, true);
+    tabs->addTab ("Panel", hw::col::panel, new PanelPage (proc.apvts), true);
+    tabs->addTab ("Presets", colours::background, new PresetsPage (proc), true);
     tabs->show (connection->getReport().allOk ? 1 : 0);
     // Just after opening (the standalone app checks the synth on start), move to the panel once all is green.
     const auto openedMs = juce::Time::getMillisecondCounter();
@@ -364,8 +466,8 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     addAndMakeVisible (*tabs);
 
     setResizable (true, true);
-    setResizeLimits (1000, 560, 2600, 1400);
-    setSize (1440, 780);
+    setResizeLimits (1100, 640, 2600, 1500);
+    setSize (1500, 860);
     startTimerHz (4);
 }
 
@@ -375,20 +477,43 @@ Trigon6Editor::~Trigon6Editor()
     setLookAndFeel (nullptr);
 }
 
-void Trigon6Editor::paint (juce::Graphics& g) { g.fillAll (colours::background); }
+void Trigon6Editor::paint (juce::Graphics& g)
+{
+    g.fillAll (hw::col::strip);
+    const auto r = getLocalBounds().toFloat();
+    hw::drawWood (g, r.withWidth ((float) kWood), true);
+    hw::drawWood (g, r.withTrimmedLeft (r.getWidth() - (float) kWood), false);
+
+    // the title, two-tone like a panel print
+    auto bar = getLocalBounds().withTrimmedLeft (kWood + 18).removeFromTop (kTopBar).toFloat();
+    const auto font = hw::titleFont (19.0f);
+    juce::GlyphArrangement ga;
+    ga.addLineOfText (font, "TRIGON-6 ", 0.0f, 0.0f);
+    const float w = ga.getBoundingBox (0, -1, true).getWidth();
+    g.setFont (font);
+    g.setColour (hw::col::title);
+    g.drawText ("TRIGON-6", bar, juce::Justification::centredLeft, false);
+    g.setColour (juce::Colour (0xff8c8c90));
+    g.drawText ("CONTROL", bar.withTrimmedLeft (w), juce::Justification::centredLeft, false);
+
+    g.setColour (juce::Colour (0xff3a3a3c));
+    g.fillRect ((float) kWood, (float) kTopBar - 1.0f, r.getWidth() - 2.0f * (float) kWood, 1.0f);
+}
 
 void Trigon6Editor::resized()
 {
-    auto r = getLocalBounds();
-    auto bar = r.removeFromTop (40).reduced (10, 6);
-    title.setBounds (bar.removeFromLeft (240));
-    status.setBounds (bar.removeFromRight (230));
-    sendAll.setBounds (bar.removeFromRight (100));
+    auto r = getLocalBounds().reduced (kWood, 0);
+    auto bar = r.removeFromTop (kTopBar).reduced (18, 11);
+    bar.removeFromLeft (330);  // the painted title
+    status.setBounds (bar.removeFromRight (200));
+    bar.removeFromRight (12);
+    sendAll.setBounds (bar.removeFromRight (104));
     bar.removeFromRight (8);
-    getSound.setBounds (bar.removeFromRight (100));
-    bar.removeFromRight (16);
-    channel.setBounds (bar.removeFromRight (70));
-    channelLabel.setBounds (bar.removeFromRight (110));
+    getSound.setBounds (bar.removeFromRight (104));
+    bar.removeFromRight (18);
+    channel.setBounds (bar.removeFromRight (64));
+    channelLabel.setBounds (bar.removeFromRight (70));
+    bar.removeFromRight (12);
     soundStatus.setBounds (bar);
 
     tabs->setBounds (r);

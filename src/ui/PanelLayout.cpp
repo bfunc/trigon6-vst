@@ -5,47 +5,44 @@ namespace t6ui
 
 const std::vector<SectionLayout>& panelLayout()
 {
-    // Three bands like the synth: modulation + effects on top, the voice in the middle, performance at the bottom.
+    // As on the synth: modulation on the left, the oscillators in the middle, filter, amp and effects on the
+    // right, and a performance strip along the bottom. Every parameter appears exactly once (tests check it).
     static const std::vector<SectionLayout> layout {
-        // top band
-        { "Poly Mod", 0.00f, 0.00f, 0.20f, 0.27f,
-          { { "pmod_osc3_amount", "pmod_fenv_amount" },
-            { "pmod_dest_freq1", "pmod_dest_freq2", "pmod_dest_freq3", "pmod_dest_filter" },
-            { "pmod_dest_pw1", "pmod_dest_pw2", "pmod_dest_fdbk", "" } } },
-        { "Aftertouch", 0.20f, 0.00f, 0.20f, 0.27f,
-          { { "at_amount" },
-            { "at_dest_freq1", "at_dest_freq2", "at_dest_freq3", "at_dest_fxa_mix" },
-            { "at_dest_filter", "at_dest_amp", "at_dest_lfo", "at_dest_fxb_mix" } } },
-        { "Misc", 0.40f, 0.00f, 0.25f, 0.27f,
-          { { "vintage", "pan_spread", "program_volume" },
-            { "key_mode", "pitch_wheel_range", "unison_voices" } } },
-        { "Effects", 0.65f, 0.00f, 0.35f, 0.27f,
-          { { "fx_on", "fxa_type", "fxa_param1", "fxa_param2", "fxa_mix", "fxa_sync" },
-            { "", "fxb_type", "fxb_param1", "fxb_param2", "fxb_mix", "fxb_sync" } } },
+        // left column
+        { "LFO", 0.000f, 0.00f, 0.230f, 0.36f,
+          { { "lfo_freq", "lfo_sync", "lfo_shape", "lfo_amount" },
+            { "lfo_dest_freq1", "lfo_dest_freq2", "lfo_dest_freq3", "lfo_dest_pw1",
+              "lfo_dest_pw2", "lfo_dest_pw3", "lfo_dest_filter", "lfo_dest_amp" } } },
+        { "Aftertouch", 0.000f, 0.36f, 0.230f, 0.22f,
+          { { "at_amount", "at_dest_freq1", "at_dest_freq2", "at_dest_freq3", "at_dest_filter" },
+            { "", "at_dest_amp", "at_dest_lfo", "at_dest_fxa_mix", "at_dest_fxb_mix" } } },
+        { "PolyMod", 0.000f, 0.58f, 0.230f, 0.24f,
+          { { "pmod_osc3_amount", "pmod_fenv_amount", "pmod_dest_freq1", "pmod_dest_freq2", "pmod_dest_freq3" },
+            { "", "", "pmod_dest_pw1", "pmod_dest_pw2", "pmod_dest_fdbk", "pmod_dest_filter" } } },
 
-        // middle band
-        { "Arp / Clock", 0.00f, 0.27f, 0.22f, 0.25f,
-          { { "arp_on", "arp_octaves", "arp_mode", "arp_hold" },
-            { "seq_on", "clock_divide", "bpm" } } },
-        { "LFO", 0.00f, 0.52f, 0.22f, 0.30f,
-          { { "lfo_freq", "lfo_shape", "lfo_amount", "lfo_sync" },
-            { "lfo_dest_freq1", "lfo_dest_freq2", "lfo_dest_freq3", "lfo_dest_filter" },
-            { "lfo_dest_pw1", "lfo_dest_pw2", "lfo_dest_pw3", "lfo_dest_amp" } } },
-        { "Oscillators", 0.22f, 0.27f, 0.46f, 0.55f,
+        // centre
+        { "Oscillators", 0.230f, 0.00f, 0.350f, 0.82f,
           { { "osc1_octave", "osc2_sync", "osc1_tri", "osc1_saw", "osc1_pulse", "osc1_pw", "osc1_volume", "fdbk_drive" },
             { "osc2_octave", "osc2_pitch", "osc2_tri", "osc2_saw", "osc2_pulse", "osc2_pw", "osc2_volume", "noise" },
             { "osc3_octave", "osc3_pitch", "osc3_tri", "osc3_saw", "osc3_pulse", "osc3_pw", "osc3_volume", "osc3_keyboard" } } },
-        { "Filter", 0.68f, 0.27f, 0.32f, 0.30f,
+
+        // right column
+        { "Filter", 0.580f, 0.00f, 0.420f, 0.34f,
           { { "cutoff", "resonance", "fenv_amount", "filter_2pole", "filter_keyboard" },
             { "fenv_attack", "fenv_decay", "fenv_sustain", "fenv_release", "fenv_velocity" } } },
-        { "Amplifier", 0.68f, 0.57f, 0.32f, 0.25f,
+        { "Amplifier", 0.580f, 0.34f, 0.420f, 0.18f,
           { { "vca_attack", "vca_decay", "vca_sustain", "vca_release", "vca_velocity" } } },
+        { "Effects", 0.580f, 0.52f, 0.420f, 0.30f,
+          { { "fxa_type", "fxa_param1", "fxa_param2", "fxa_mix", "fxa_sync", "fx_on" },
+            { "fxb_type", "fxb_param1", "fxb_param2", "fxb_mix", "fxb_sync", "" } } },
 
-        // bottom band
-        { "Master", 0.00f, 0.82f, 0.22f, 0.18f,
-          { { "distortion", "unison_on" } } },
-        { "Glide", 0.22f, 0.82f, 0.46f, 0.18f,
-          { { "glide_on", "glide_rate", "glide_mode" } } },
+        // bottom strip
+        { "Glide / Unison", 0.000f, 0.82f, 0.230f, 0.18f,
+          { { "glide_rate", "glide_mode", "glide_on", "unison_voices", "unison_on" } } },
+        { "Arp / Clock", 0.230f, 0.82f, 0.350f, 0.18f,
+          { { "arp_on", "arp_octaves", "arp_mode", "arp_hold", "seq_on", "bpm", "clock_divide" } } },
+        { "Master", 0.580f, 0.82f, 0.420f, 0.18f,
+          { { "distortion", "vintage", "pan_spread", "program_volume", "pitch_wheel_range", "key_mode" } } },
     };
     return layout;
 }

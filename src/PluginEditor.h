@@ -1,12 +1,13 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/HardwareLook.h"
 
 #include <memory>
 #include <vector>
 
-// Top bar (MIDI channel, Send all, sent count) over two tabs: Connection (ports, status, the synth's Globals
-// buttons) and Panel (laid out like the Trigon-6 front panel).
+// Top bar (title, sound status, MIDI channel, Get sound, Send all, sent count) over three tabs: Connection
+// (ports, status, the synth's Globals buttons), Panel (styled after the Trigon-6 front panel) and Presets.
 class Trigon6Editor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -20,9 +21,9 @@ private:
     void timerCallback() override;
 
     Trigon6Processor& proc;
-    juce::LookAndFeel_V4 lnf;
+    hw::Look look;
     juce::TooltipWindow tooltips { this, 600 };
-    juce::Label title, channelLabel, status, soundStatus;
+    juce::Label channelLabel, status, soundStatus;
     juce::ComboBox channel;
     juce::TextButton sendAll { "Send all" };
     juce::TextButton getSound { "Get sound" };

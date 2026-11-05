@@ -5,12 +5,12 @@
 
 namespace theme
 {
-const juce::Colour background { 0xff141416 };
-const juce::Colour section { 0xff222226 };
-const juce::Colour border { 0xff3a3a40 };
+const juce::Colour background { 0xff0e0e0f };
+const juce::Colour section { 0xff18181a };
+const juce::Colour border { 0xff3a3a3c };
 const juce::Colour text { 0xffe8e8ea };
 const juce::Colour dim { 0xff8a8a92 };
-const juce::Colour led { 0xffe0402c };
+const juce::Colour led { 0xffff3b1f };
 const juce::Colour ok { 0xff3cc46a };
 const juce::Colour warn { 0xffe8b730 };
 const juce::Colour bad { 0xffe0402c };
