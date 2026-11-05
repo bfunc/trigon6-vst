@@ -44,7 +44,7 @@ juce::String shortName (const t6::ParamDef& p)
 }
 
 // One control on the panel: a big knob, an LED-style toggle, a drop-down, or a placeholder for an unknown NRPN.
-class Cell : public juce::Component
+class Cell : public juce::Component, public juce::SettableTooltipClient
 {
 public:
     Cell (APVTS& state, const std::string& cellId)
