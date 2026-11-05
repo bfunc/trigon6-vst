@@ -1,0 +1,120 @@
+#include "PluginProcessor.h"
+
+#include "PluginEditor.h"
+#include "core/Nrpn.h"
+#include "core/ParamTable.h"
+
+namespace
+{
+const juce::Identifier kChannel { "midiChannel" };
+}
+
+juce::AudioProcessorValueTreeState::ParameterLayout Trigon6Processor::createLayout()
+{
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+    for (const auto& p : t6::paramTable())
+    {
+        const juce::ParameterID id { p.id, 1 };
+        const auto attrs = juce::AudioParameterIntAttributes().withStringFromValueFunction (
+            [&p] (int v, int) { return juce::String (t6::formatValue (p, v)); });
+
+        switch (p.kind)
+        {
+            case t6::Kind::Bool:
+                layout.add (std::make_unique<juce::AudioParameterBool> (id, p.name, false));
+                break;
+            case t6::Kind::Choice:
+            {
+                juce::StringArray names;
+                for (const auto& c : p.choices)
+                    names.add (c);
+                layout.add (std::make_unique<juce::AudioParameterChoice> (id, p.name, names, 0));
+                break;
+            }
+            case t6::Kind::Bipolar:
+                layout.add (std::make_unique<juce::AudioParameterInt> (id, p.name, p.min, p.max, p.center, attrs));
+                break;
+            case t6::Kind::Int:
+                layout.add (std::make_unique<juce::AudioParameterInt> (id, p.name, p.min, p.max, p.min, attrs));
+                break;
+        }
+    }
+    return layout;
+}
+
+Trigon6Processor::Trigon6Processor()
+    : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+      apvts (*this, nullptr, "Trigon6", createLayout()),
+      queue (t6::paramTable().size())
+{
+    for (const auto& p : t6::paramTable())
+        raw.push_back (apvts.getRawParameterValue (p.id));
+    apvts.state.setProperty (kChannel, 1, nullptr);
+}
+
+void Trigon6Processor::setMidiChannel (int ch)
+{
+    ch = juce::jlimit (1, 16, ch);
+    midiChannel = ch;
+    apvts.state.setProperty (kChannel, ch, nullptr);
+}
+
+void Trigon6Processor::prepareToPlay (double sr, int)
+{
+    sampleRate = sr > 0 ? sr : 44100.0;
+}
+
+void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi)
+{
+    audio.clear();
+    midi.clear();  // incoming MIDI is not passed on (stage 4 reads it for feedback)
+
+    const auto& table = t6::paramTable();
+    // A choice parameter's raw value is the choice index, counted from the NRPN minimum.
+    auto valueOf = [&] (size_t i)
+    {
+        const int v = (int) std::lround (raw[i]->load());
+        return table[i].kind == t6::Kind::Choice ? table[i].min + v : v;
+    };
+
+    if (needsPrime.exchange (false))
+        for (size_t i = 0; i < raw.size(); ++i)
+            queue.markSynced (i, valueOf (i));
+
+    if (sendAllRequested.exchange (false))
+        queue.markAllDirty();
+
+    for (size_t i = 0; i < raw.size(); ++i)
+        queue.setValue (i, valueOf (i));
+
+    const int ch = midiChannel.load();
+    queue.collect (clockMs, [&] (size_t i, int value)
+    {
+        for (auto cc : t6::encodeNrpn (table[i].nrpn, value))
+            midi.addEvent (juce::MidiMessage::controllerEvent (ch, cc.controller, cc.value), 0);
+        ++sentCount;
+    });
+
+    clockMs += 1000.0 * audio.getNumSamples() / sampleRate;
+}
+
+void Trigon6Processor::getStateInformation (juce::MemoryBlock& dest)
+{
+    if (auto xml = apvts.copyState().createXml())
+        copyXmlToBinary (*xml, dest);
+}
+
+void Trigon6Processor::setStateInformation (const void* data, int size)
+{
+    if (auto xml = getXmlFromBinary (data, size))
+        if (xml->hasTagName (apvts.state.getType()))
+        {
+            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            midiChannel = juce::jlimit (1, 16, (int) apvts.state.getProperty (kChannel, 1));
+            needsPrime = true;  // a loaded project does not overwrite the synth; "Send all" does that
+        }
+}
+
+juce::AudioProcessorEditor* Trigon6Processor::createEditor() { return new Trigon6Editor (*this); }
+
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new Trigon6Processor(); }

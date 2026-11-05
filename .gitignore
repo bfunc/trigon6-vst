@@ -1,0 +1,8 @@
+build/
+builds/
+.vs/
+.vscode/
+.DS_Store
+docs/*.pdf
+docs/*.txt
+docs/*.jpg

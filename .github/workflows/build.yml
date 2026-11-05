@@ -1,0 +1,79 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Windows only (the user's platform).
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        shell: bash
+        run: |
+          VER=$(sed -n 's/.*T6_VERSION_LABEL "\([^"]*\)".*/\1/p' CMakeLists.txt)
+          [ -n "$VER" ] || { echo "no T6_VERSION_LABEL in CMakeLists.txt"; exit 1; }
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            [ "$GITHUB_REF_NAME" = "v$VER" ] || { echo "tag $GITHUB_REF_NAME does not match label $VER"; exit 1; }
+            ZIP="Trigon6Control-$VER-windows.zip"
+          else
+            ZIP="Trigon6Control-latest-$VER-windows.zip"
+          fi
+          printf 'Trigon6 Control %s\nCommit: %s\nBuilt: %s\n' "$VER" "${GITHUB_SHA::7}" "$(date -u '+%Y-%m-%d %H:%M UTC')" > VERSION.txt
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem build -Recurse -Filter "Trigon6 Control.exe" | Where-Object FullName -like '*Standalone*' | Select-Object -First 1
+          $vst = Get-ChildItem build -Recurse -Directory -Filter "Trigon6 Control.vst3" | Select-Object -First 1
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item $exe.FullName "dist/Trigon6 Control.exe"
+          Copy-Item $vst.FullName "dist/Trigon6 Control.vst3" -Recurse
+          Copy-Item VERSION.txt dist/VERSION.txt
+          Compress-Archive -Path "dist/*" -DestinationPath $env:ZIP
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Trigon6Control-windows
+          path: Trigon6Control-*-windows.zip
+          retention-days: 14
+
+  # Every push to main refreshes the "latest" pre-release; a v* tag makes a real release.
+  publish:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            gh release create "$GITHUB_REF_NAME" art/Trigon6Control-windows/*.zip --title "Trigon6 Control $GITHUB_REF_NAME" --notes "VST3 + standalone for Windows. See the README."
+          else
+            gh release delete latest --cleanup-tag -y || true
+            gh release create latest art/Trigon6Control-windows/*.zip --prerelease --target "$GITHUB_SHA" --title "Latest build (main)" --notes "Built from ${GITHUB_SHA::7}. Replaced on every push to main."
+          fi
