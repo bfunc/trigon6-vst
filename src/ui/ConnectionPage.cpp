@@ -220,8 +220,7 @@ void ConnectionPage::paintChecklist (juce::Graphics& g, juce::Rectangle<int> are
         juce::String detail = item.detail;
         if (showFix)
         {
-            detail << "
-> " << item.fix;
+            detail << "\n> " << item.fix;
             fixShown = true;
         }
         if (! item.required && ! item.blocked)
