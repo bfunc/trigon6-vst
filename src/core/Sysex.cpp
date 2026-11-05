@@ -67,12 +67,9 @@ std::string toHex (const uint8_t* msg, size_t size, size_t maxBytes)
 std::optional<std::vector<int>> parseGlobalDump (const uint8_t* msg, size_t size, uint8_t id)
 {
     strip (msg, size);
-    if (size != 3 + 2 * kGlobalCount || msg[0] != kDsiId || msg[1] != id || msg[2] != 0x0F)
+    if (size != 3 + kGlobalCount || msg[0] != kDsiId || msg[1] != id || msg[2] != 0x0F)
         return std::nullopt;
-    std::vector<int> values (kGlobalCount);
-    for (size_t i = 0; i < kGlobalCount; ++i)
-        values[i] = (msg[3 + 2 * i] & 0x0F) | ((msg[4 + 2 * i] & 0x0F) << 4);
-    return values;
+    return std::vector<int> (msg + 3, msg + 3 + kGlobalCount);
 }
 
 SysexKind classifySysex (const uint8_t* msg, size_t size, uint8_t id)

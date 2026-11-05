@@ -256,17 +256,15 @@ static void testSysexReplies()
     CHECK (classifySysex (inq.data(), inq.size()) == SysexKind::DeviceInquiryReply);
     CHECK (classifySysex (inq.data() + 1, inq.size() - 2) == SysexKind::DeviceInquiryReply);  // JUCE strips F0/F7
 
-    // global dump: 25 values as LS, MS nibbles
-    std::vector<uint8_t> gd { 0xF0, 0x01, 0x39, 0x0F };
-    for (int i = 0; i < 25; ++i)
-    {
-        const int v = i == 2 ? 0x1F : i;  // value 31 at index 2 -> nibbles F, 1
-        gd.push_back ((uint8_t) (v & 0x0F));
-        gd.push_back ((uint8_t) (v >> 4));
-    }
+    // global dump: 24 values, one byte each (the start is what a Trigon-6 sent: 29 bytes in all)
+    std::vector<uint8_t> gd { 0xF0, 0x01, 0x39, 0x0F, 0x0C, 0x32, 0x00, 0x03, 0x00, 0x02, 0x02, 0x01, 0x01, 0x01, 0x01, 0x00, 0x02 };
+    for (int i = 13; i < 24; ++i)
+        gd.push_back ((uint8_t) i);
     gd.push_back (0xF7);
+    CHECK (gd.size() == 29);
     auto g = parseGlobalDump (gd.data(), gd.size());
-    CHECK (g && g->size() == 25 && (*g)[2] == 31 && (*g)[24] == 24);
+    CHECK (g && g->size() == 24 && (*g)[0] == 12 && (*g)[1] == 50 && (*g)[8] == 1 && (*g)[23] == 23);
+    CHECK (parseGlobalDump (gd.data() + 1, gd.size() - 2));  // JUCE strips F0/F7
     CHECK (classifySysex (gd.data(), gd.size()) == SysexKind::GlobalDump);
     gd.erase (gd.begin() + 5);
     CHECK (! parseGlobalDump (gd.data(), gd.size()));
@@ -290,7 +288,7 @@ static void testGlobals()
     CHECK (std::string (globalAt (0, 9)->name) == "MIDI Out");
     const auto* xmit = globalByNrpn (kGlobalParamXmit);
     CHECK (xmit && globalValueName (*xmit, 2) == "NR" && globalValueName (*xmit, 9) == "raw 9");
-    CHECK (globalValueName (*globalByNrpn (1025), 15) == "+3");   // transpose: raw 12 = 0
+    CHECK (globalValueName (*globalByNrpn (1024), 15) == "+3");   // transpose: raw 12 = 0
     CHECK (globalValueName (*globalByNrpn (kGlobalMidiChannel), 0) == "All");
 }
 
@@ -315,7 +313,7 @@ static LinkSnapshot connectedSnapshot()
         s.globalNrpn[n] = v;
         s.globalNrpnMs[n] = 6000;
     }
-    s.globalsDump.assign (25, 0);
+    s.globalsDump.assign (kGlobalCount, 0);
     return s;
 }
 

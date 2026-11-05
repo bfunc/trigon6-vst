@@ -30,7 +30,7 @@ struct LinkSnapshot
     double inquiryMs = -1;
     DeviceInfo device;
     double globalsMs = -1;
-    std::vector<int> globalsDump;  // 25 values, in dump order
+    std::vector<int> globalsDump;  // 24 values, in dump order
     double editBufferMs = -1;
     bool editBufferOk = false;
     size_t editBufferSize = 0;

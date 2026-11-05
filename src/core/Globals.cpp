@@ -25,10 +25,12 @@ std::vector<GlobalDef> build()
 {
     // Positions and value names: User's Guide 1.1, "Global Settings". NRPN numbers: its Appendix B.
     // Checked on the synth (it sends a global as NRPN when you change it): 1029, 1030, 1032, 1033.
+    // Transpose 1024 and Master Tune 1025: the global dump starts 12, 50 (both centred), and 50 is out of
+    // Transpose's range 0-24.
     return {
         // Top row
-        { 0, 0, "Transpose",    1025, {}, -12, {}, "", false },
-        { 0, 1, "Master Tune",  1024, {}, -50, {}, "", false },
+        { 0, 0, "Transpose",    1024, {}, -12, {}, "", false },
+        { 0, 1, "Master Tune",  1025, {}, -50, {}, "", false },
         { 0, 2, "MIDI Channel", kGlobalMidiChannel, channelNames(), 0, {}, "the plugin's channel, or All", false },
         { 0, 3, "MIDI Clock",   1027, { "Off", "Out", "In", "i-0", "nSS" }, 0, {}, "", false },
         { 0, 4, "Clock Port",   1028, { "MID", "USB" }, 0, {}, "", false },

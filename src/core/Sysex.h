@@ -34,8 +34,8 @@ std::optional<DeviceInfo> parseDeviceInquiryReply (const uint8_t* msg, size_t si
 // Bytes as "7E 7F 06", at most maxBytes of them, then " ..." when there are more.
 std::string toHex (const uint8_t* msg, size_t size, size_t maxBytes = 32);
 
-// Global parameters dump: F0 01 39 0F <50 nibbles, LS then MS> F7 -> 25 values.
-constexpr size_t kGlobalCount = 25;
+// Global parameters dump: F0 01 39 0F <24 bytes, one per value> F7 (29 bytes, as the synth sends it).
+constexpr size_t kGlobalCount = 24;
 std::optional<std::vector<int>> parseGlobalDump (const uint8_t* msg, size_t size, uint8_t id = kTrigon6Id);
 
 enum class SysexKind { Other, DeviceInquiryReply, GlobalDump, EditBufferDump, ProgramDump };
