@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace t6
@@ -23,6 +24,7 @@ struct DeviceInfo
 {
     bool isTrigon6 = false;  // DSI ID 01, family 2D
     int versionMajor = -1, versionMinor = -1;  // version byte 0jjj nnnn: jjj minor, nnnn major
+    std::string raw;  // the reply as hex, without F0/F7, for the Connection page
 };
 std::optional<DeviceInfo> parseDeviceInquiryReply (const uint8_t* msg, size_t size);
 

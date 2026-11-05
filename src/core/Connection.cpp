@@ -393,8 +393,8 @@ Report evaluate (const LinkSnapshot& s)
                        std::to_string (s.echoCount) + " messages the plugin sent came straight back.",
                        "Don't route the Trigon's input back to its output (in FL: MIDI thru, or a MIDI Out channel on the same port)." });
     if (s.inquiryMs >= 0 && ! s.device.isTrigon6)
-        w.push_back ({ Health::Warn, "Not a Trigon-6", "The device on this port answered, but not as a Trigon-6.",
-                       "Pick the synth's ports above." });
+        w.push_back ({ Health::Warn, "Not a Trigon-6", "The device on this port answered, but not as a Trigon-6. Reply: " + s.device.raw,
+                       "Pick the synth's ports above. If it is the Trigon, send this reply to the developer." });
     auto known = [&] (int nrpn, std::initializer_list<int> raws)
     {
         const auto r = readGlobal (s, nrpn);

@@ -34,6 +34,14 @@ std::optional<DeviceInfo> parseDeviceInquiryReply (const uint8_t* msg, size_t si
         return std::nullopt;
     DeviceInfo info;
     info.isTrigon6 = size >= 6 && msg[4] == kDsiId && msg[5] == kTrigon6Id;
+    static const char* hex = "0123456789ABCDEF";
+    for (size_t i = 0; i < size && i < 32; ++i)
+    {
+        if (i > 0)
+            info.raw += ' ';
+        info.raw += hex[msg[i] >> 4];
+        info.raw += hex[msg[i] & 0x0F];
+    }
     if (size >= 10)
     {
         info.versionMajor = msg[9] & 0x0F;

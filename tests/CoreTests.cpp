@@ -248,6 +248,7 @@ static void testSysexReplies()
     const std::vector<uint8_t> inq { 0xF0, 0x7E, 0x7F, 0x06, 0x02, 0x01, 0x2D, 0x01, 0x00, 0x00, 0x21, 0xF7 };
     auto info = parseDeviceInquiryReply (inq.data(), inq.size());
     CHECK (info && info->isTrigon6 && info->versionMajor == 1 && info->versionMinor == 2);
+    CHECK (info->raw == "7E 7F 06 02 01 2D 01 00 00 21");
     CHECK (classifySysex (inq.data(), inq.size()) == SysexKind::DeviceInquiryReply);
     CHECK (classifySysex (inq.data() + 1, inq.size() - 2) == SysexKind::DeviceInquiryReply);  // JUCE strips F0/F7
 
