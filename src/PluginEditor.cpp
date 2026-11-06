@@ -5,10 +5,12 @@
 #include "ui/HardwareLook.h"
 #include "ui/PanelLayout.h"
 #include "ui/PresetsPage.h"
+#include "ui/SavePanel.h"
 #include "ui/Theme.h"
 
 #include <cstring>
 #include <set>
+#include <tuple>
 
 namespace
 {
@@ -438,6 +440,9 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     getSound.setTooltip ("Read the synth's current sound into the plugin (sends nothing that changes the sound)");
     getSound.onClick = [this] { proc.requestGetSound(); };
     addAndMakeVisible (getSound);
+    save.setTooltip ("Save the current sound into a user slot on the synth, a .syx file on the PC, or both");
+    save.onClick = [this] { openSave(); };
+    addAndMakeVisible (save);
     soundStatus.setColour (juce::Label::textColourId, hw::col::value);
     soundStatus.setMinimumHorizontalScale (0.6f);
     addAndMakeVisible (soundStatus);
@@ -454,7 +459,8 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     auto* connection = new ConnectionPage (proc);
     tabs->addTab ("Connection", colours::background, connection, true);
     tabs->addTab ("Panel", hw::col::panel, new PanelPage (proc.apvts), true);
-    tabs->addTab ("Presets", colours::background, new PresetsPage (proc), true);
+    presetsPage = new PresetsPage (proc);
+    tabs->addTab ("Presets", colours::background, presetsPage, true);
     tabs->show (connection->getReport().allOk ? 1 : 0);
     // Just after opening (the standalone app checks the synth on start), move to the panel once all is green.
     const auto openedMs = juce::Time::getMillisecondCounter();
@@ -473,6 +479,7 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
 
 Trigon6Editor::~Trigon6Editor()
 {
+    savePanel.reset();
     tabs.reset();
     setLookAndFeel (nullptr);
 }
@@ -509,6 +516,8 @@ void Trigon6Editor::resized()
     bar.removeFromRight (12);
     sendAll.setBounds (bar.removeFromRight (104));
     bar.removeFromRight (8);
+    save.setBounds (bar.removeFromRight (80));
+    bar.removeFromRight (8);
     getSound.setBounds (bar.removeFromRight (104));
     bar.removeFromRight (18);
     channel.setBounds (bar.removeFromRight (64));
@@ -517,6 +526,33 @@ void Trigon6Editor::resized()
     soundStatus.setBounds (bar);
 
     tabs->setBounds (r);
+    if (savePanel != nullptr)
+        savePanel->setBounds (getLocalBounds());
+}
+
+void Trigon6Editor::openSave()
+{
+    if (savePanel != nullptr)
+        return;
+    // The default slot: the program selected on the Presets tab, else the one last picked on the synth.
+    int bank = 0, program = 0;
+    const auto pc = proc.getLink().lastProgramChange();
+    if (tabs->getCurrentContentComponent() == presetsPage && presetsPage->selectedSlot())
+        std::tie (bank, program) = *presetsPage->selectedSlot();
+    else if (pc.seq != 0)
+        std::tie (bank, program) = std::make_pair (pc.bank, pc.program);
+    savePanel = std::make_unique<SavePanel> (proc, bank, program);
+    savePanel->onClose = [this]
+    {
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Trigon6Editor> (this)]
+        {
+            if (safe != nullptr)
+                safe->savePanel.reset();
+        });
+    };
+    addAndMakeVisible (*savePanel);
+    savePanel->setBounds (getLocalBounds());
+    savePanel->grabKeyboardFocus();
 }
 
 void Trigon6Editor::timerCallback()

@@ -7,6 +7,29 @@ namespace t6
 
 std::vector<uint8_t> requestEditBuffer (uint8_t id) { return { 0xF0, kDsiId, id, 0x06, 0xF7 }; }
 
+namespace
+{
+std::vector<uint8_t> dump (std::vector<uint8_t> head, const std::vector<uint8_t>& data)
+{
+    if (data.size() != kProgramBytes)
+        return {};
+    const auto packed = packMsBit (data.data(), data.size());
+    head.insert (head.end(), packed.begin(), packed.end());
+    head.push_back (0xF7);
+    return head;
+}
+} // namespace
+
+std::vector<uint8_t> programDump (int bank, int program, const std::vector<uint8_t>& data, uint8_t id)
+{
+    return dump ({ 0xF0, kDsiId, id, 0x02, (uint8_t) (bank & 0x7F), (uint8_t) (program & 0x7F) }, data);
+}
+
+std::vector<uint8_t> editBufferDump (const std::vector<uint8_t>& data, uint8_t id)
+{
+    return dump ({ 0xF0, kDsiId, id, 0x03 }, data);
+}
+
 std::vector<uint8_t> requestProgram (int bank, int program, uint8_t id)
 {
     return { 0xF0, kDsiId, id, 0x05, (uint8_t) (bank & 0x7F), (uint8_t) (program & 0x7F), 0xF7 };

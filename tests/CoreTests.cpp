@@ -83,6 +83,37 @@ static void testNrpnDecode()
     CHECK (e && e->param == 45 && e->value == 128);
 }
 
+static void testSaveCore()
+{
+    std::vector<uint8_t> prog (kProgramBytes);
+    for (size_t i = 0; i < prog.size(); ++i)
+        prog[i] = (uint8_t) ((i * 37) & 0xFF);
+    setProgramName (prog, std::string ("Bright Bass") + (char) 1 + " with a very long name");
+    CHECK (programName (prog) == "Bright Bass  with a");
+    setProgramName (prog, "Pad");
+    CHECK (programName (prog) == "Pad" && prog[kNameOffset + 3] == ' ' && prog[kNameOffset + 19] == ' ');
+
+    const auto pd = programDump (3, 42, prog);
+    CHECK (pd.size() == 6 + kProgramPackedBytes + 1 && pd[3] == 0x02 && pd[4] == 3 && pd[5] == 42 && pd.back() == 0xF7);
+    const auto sp = parseStoredProgram (pd.data(), pd.size(), kTrigon6Id);
+    CHECK (sp && sp->bank == 3 && sp->program == 42 && sp->data == prog && sp->name == "Pad");
+    const auto eb = editBufferDump (prog);
+    CHECK (eb.size() == 4 + kProgramPackedBytes + 1 && eb[3] == 0x03);
+    const auto back = parseProgramDump (eb.data() + 1, eb.size() - 2);
+    CHECK (back && *back == prog);
+    CHECK (programDump (0, 0, std::vector<uint8_t> (10)).empty());
+    for (auto b : pd)
+        if (b != 0xF0 && b != 0xF7)
+            CHECK (b < 0x80);
+
+    CHECK (isWritableSlot (0, 0) && isWritableSlot (4, 99));
+    CHECK (! isWritableSlot (5, 0) && ! isWritableSlot (9, 99) && ! isWritableSlot (0, 100) && ! isWritableSlot (-1, 0));
+    auto other = prog;
+    other[200] ^= 1;
+    other[300] ^= 2;
+    CHECK (countDifferences (prog, prog) == 0 && countDifferences (prog, other) == 2 && countDifferences (prog, {}) == -1);
+}
+
 static void testPacked()
 {
     CHECK (packedSize (1024) == 1171);
@@ -604,6 +635,7 @@ int main()
     testNrpnEncode();
     testNrpnDecode();
     testPacked();
+    testSaveCore();
     testSysex();
     testSendQueue();
     testTable();

@@ -21,6 +21,12 @@ std::vector<uint8_t> requestProgram (int bank, int program, uint8_t id = kTrigon
 std::vector<uint8_t> requestDeviceInquiry();                  // F0 7E 7F 06 01 F7
 std::vector<uint8_t> requestGlobals (uint8_t id = kTrigon6Id);                        // F0 01 39 0E F7
 
+// Dumps that go to the synth, from the 1024 unpacked program bytes.
+// A program dump (02) writes into that program's slot in the synth's memory; an edit buffer dump (03) is the
+// same sound without a slot (how a sound saved on the PC is stored).
+std::vector<uint8_t> programDump (int bank, int program, const std::vector<uint8_t>& data, uint8_t id = kTrigon6Id);
+std::vector<uint8_t> editBufferDump (const std::vector<uint8_t>& data, uint8_t id = kTrigon6Id);
+
 // Reply to the device inquiry: F0 7E cc 06 02 01 39 01 00 00 <version> ... F7.
 struct DeviceInfo
 {

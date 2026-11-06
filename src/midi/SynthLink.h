@@ -72,6 +72,9 @@ public:
 
     // Stored programs: ask for one; each good program dump that arrives is kept (the last 64) with a seq.
     void requestProgram (int bank, int program);
+    // Writes the 1024 program bytes into that slot of the synth's memory (a program dump). Only the Save panel
+    // calls it, after the user pressed Save and the slot's old contents were backed up.
+    void writeProgram (int bank, int program, const std::vector<uint8_t>& data);
     struct ProgramIn
     {
         uint32_t seq = 0;

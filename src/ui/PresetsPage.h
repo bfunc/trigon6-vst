@@ -1,14 +1,16 @@
 // The Presets page: the synth's stored programs by bank, read one at a time (Fetch), kept in a cache on disk
 // and shown at start without asking the synth; Load sends a program change; programs save as .syx files.
-// Nothing here writes into the synth's memory.
+// Nothing here writes into the synth's memory (Save in the top bar does, see SavePanel).
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "PluginProcessor.h"
 #include "core/Presets.h"
+#include "ui/AppSettings.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 class PresetsPage : public juce::Component, private juce::TableListBoxModel, private juce::Timer
@@ -19,6 +21,9 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+
+    // The selected row when exactly one is selected: the default slot for Save.
+    std::optional<std::pair<int, int>> selectedSlot() const;
 
 private:
     int getNumRows() override;
@@ -57,7 +62,7 @@ private:
     juce::ProgressBar progressBar { progress };
     juce::Label status, note;
     std::unique_ptr<juce::FileChooser> chooser;
-    std::unique_ptr<juce::PropertiesFile> settings;
+    juce::SharedResourcePointer<AppSettings> settings;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PresetsPage)
 };

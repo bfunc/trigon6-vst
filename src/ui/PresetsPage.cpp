@@ -6,11 +6,6 @@ namespace
 {
 enum Column { kProgramColumn = 1, kNameColumn, kTypeColumn, kStatusColumn };
 
-juce::File documentsFolder (const char* sub)
-{
-    return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("Trigon6 Control").getChildFile (sub);
-}
-
 juce::Colour statusColour (t6::PresetStatus s)
 {
     switch (s)
@@ -28,13 +23,6 @@ juce::Colour statusColour (t6::PresetStatus s)
 PresetsPage::PresetsPage (Trigon6Processor& p)
     : proc (p), entries ((size_t) (t6::kBankCount * t6::kProgramsPerBank)), table ("Programs", this)
 {
-    juce::PropertiesFile::Options o;
-    o.applicationName = "Trigon6 Control";
-    o.filenameSuffix = ".settings";
-    o.folderName = "Trigon6 Control";
-    o.osxLibrarySubFolder = "Application Support";
-    settings = std::make_unique<juce::PropertiesFile> (o);
-
     for (int b = 0; b < t6::kBankCount; ++b)
         bankBox.addItem (juce::String (b < t6::kUserBanks ? "User " : "Factory ") + juce::String (t6::programLabel (b, 0)) + " - "
                              + juce::String (t6::programLabel (b, t6::kProgramsPerBank - 1)),
@@ -81,7 +69,7 @@ PresetsPage::PresetsPage (Trigon6Processor& p)
     status.setColour (juce::Label::textColourId, theme::text);
     addAndMakeVisible (status);
     note.setColour (juce::Label::textColourId, theme::dim);
-    note.setText ("Load switches the synth's current sound; nothing here writes into the synth's memory.",
+    note.setText ("Load switches the synth's current sound. Save (top bar) writes the current sound into a user slot or a file.",
                   juce::dontSendNotification);
     addAndMakeVisible (note);
 
@@ -93,6 +81,13 @@ PresetsPage::PresetsPage (Trigon6Processor& p)
 }
 
 PresetsPage::~PresetsPage() { stopTimer(); }
+
+std::optional<std::pair<int, int>> PresetsPage::selectedSlot() const
+{
+    if (table.getNumSelectedRows() != 1)
+        return std::nullopt;
+    return std::make_pair (currentBank(), table.getSelectedRow());
+}
 
 int PresetsPage::currentBank() const { return juce::jlimit (0, t6::kBankCount - 1, bankBox.getSelectedId() - 1); }
 
@@ -342,7 +337,7 @@ void PresetsPage::saveAs()
         return;
     }
 
-    juce::File folder (settings->getValue ("lastPresetFolder"));
+    juce::File folder (settings->file->getValue ("lastPresetFolder"));
     if (! folder.isDirectory())
     {
         folder = documentsFolder ("Presets");
@@ -361,8 +356,8 @@ void PresetsPage::saveAs()
             file = file.withFileExtension ("syx");
         if (file.replaceWithData (sysex.data(), sysex.size()))
         {
-            settings->setValue ("lastPresetFolder", file.getParentDirectory().getFullPathName());
-            settings->saveIfNeeded();
+            settings->file->setValue ("lastPresetFolder", file.getParentDirectory().getFullPathName());
+            settings->file->saveIfNeeded();
             status.setText ("Saved " + file.getFullPathName(), juce::dontSendNotification);
         }
         else

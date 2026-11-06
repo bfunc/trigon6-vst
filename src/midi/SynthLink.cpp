@@ -435,6 +435,15 @@ void SynthLink::requestProgram (int bank, int program)
     sendSysex (t6::requestProgram (bank, program, (uint8_t) sysexId.load()));
 }
 
+void SynthLink::writeProgram (int bank, int program, const std::vector<uint8_t>& data)
+{
+    if (! t6::isWritableSlot (bank, program))
+        return;
+    const auto msg = t6::programDump (bank, program, data, (uint8_t) sysexId.load());
+    if (! msg.empty())
+        sendSysex (msg);
+}
+
 uint32_t SynthLink::readPrograms (uint32_t afterSeq, std::vector<ProgramIn>& out) const
 {
     const juce::ScopedLock sl (stateLock);

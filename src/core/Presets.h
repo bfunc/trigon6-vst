@@ -21,6 +21,15 @@ constexpr int kUserBanks = 5;
 constexpr size_t kNameOffset = 116;
 constexpr size_t kNameLength = 20;
 std::string programName (const std::vector<uint8_t>& data);
+// Puts a name into the program bytes: cut to 20, padded with spaces; characters the synth cannot show become spaces.
+void setProgramName (std::vector<uint8_t>& data, const std::string& name);
+// The characters a name may hold (printable ASCII).
+bool isNameChar (char c);
+
+// Factory banks (5-9) are never written.
+bool isWritableSlot (int bank, int program);
+// How many of the 1024 bytes differ (a program read back after writing it); -1 when the sizes differ.
+int countDifferences (const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
 
 // A type guessed from the name ("Bamboo Bass" -> "Bass"); "" when the name gives no hint.
 // The synth itself stores no category.

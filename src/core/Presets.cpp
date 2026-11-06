@@ -41,6 +41,34 @@ std::string programName (const std::vector<uint8_t>& data)
     return {};
 }
 
+void setProgramName (std::vector<uint8_t>& data, const std::string& name)
+{
+    if (data.size() < kNameOffset + kNameLength)
+        return;
+    for (size_t i = 0; i < kNameLength; ++i)
+    {
+        const char c = i < name.size() ? name[i] : ' ';
+        data[kNameOffset + i] = (uint8_t) (isNameChar (c) ? c : ' ');
+    }
+}
+
+bool isNameChar (char c) { return c >= 32 && c <= 126; }
+
+bool isWritableSlot (int bank, int program)
+{
+    return bank >= 0 && bank < kUserBanks && program >= 0 && program < kProgramsPerBank;
+}
+
+int countDifferences (const std::vector<uint8_t>& a, const std::vector<uint8_t>& b)
+{
+    if (a.size() != b.size())
+        return -1;
+    int n = 0;
+    for (size_t i = 0; i < a.size(); ++i)
+        n += a[i] != b[i] ? 1 : 0;
+    return n;
+}
+
 std::string programType (const std::string& name)
 {
     std::vector<std::string> words;

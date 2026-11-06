@@ -56,6 +56,7 @@ target_sources(Trigon6Control PRIVATE
     src/midi/SynthLink.cpp
     src/ui/ConnectionPage.cpp
     src/ui/PresetsPage.cpp
+    src/ui/SavePanel.cpp
     src/ui/HardwareLook.cpp)
 
 # Panel fonts (SIL Open Font License, see assets/fonts/OFL-*.txt), compiled in as BinaryData.

@@ -4,9 +4,12 @@
 #include "ui/HardwareLook.h"
 
 #include <memory>
+
+class PresetsPage;
+class SavePanel;
 #include <vector>
 
-// Top bar (title, sound status, MIDI channel, Get sound, Send all, sent count) over three tabs: Connection
+// Top bar (title, sound status, MIDI channel, Get sound, Save, Send all, sent count) over three tabs: Connection
 // (ports, status, the synth's Globals buttons), Panel (styled after the Trigon-6 front panel) and Presets.
 class Trigon6Editor : public juce::AudioProcessorEditor, private juce::Timer
 {
@@ -27,6 +30,10 @@ private:
     juce::ComboBox channel;
     juce::TextButton sendAll { "Send all" };
     juce::TextButton getSound { "Get sound" };
+    juce::TextButton save { "Save" };
+    void openSave();
+    std::unique_ptr<SavePanel> savePanel;
+    PresetsPage* presetsPage = nullptr;  // owned by tabs
     class Tabs;
     std::unique_ptr<Tabs> tabs;
 
