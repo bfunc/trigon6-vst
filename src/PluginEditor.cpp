@@ -542,9 +542,9 @@ void Trigon6Editor::openSave()
     else if (pc.seq != 0)
         std::tie (bank, program) = std::make_pair (pc.bank, pc.program);
     savePanel = std::make_unique<SavePanel> (proc, bank, program);
-    savePanel->onClose = [this]
+    savePanel->onClose = [safe = juce::Component::SafePointer<Trigon6Editor> (this)]
     {
-        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Trigon6Editor> (this)]
+        juce::MessageManager::callAsync ([safe]
         {
             if (safe != nullptr)
                 safe->savePanel.reset();
