@@ -338,6 +338,22 @@ static void testTable()
     const auto& pole = t[(size_t) indexOfNrpn (33)];
     CHECK (pole.inverted && nrpnValues (pole, 1)[0].value == 0 && nrpnValues (pole, 0)[0].value == 1);
     CHECK (valueFromBytes (pole, 0, 0) == 1 && valueAfterNrpn (pole, 0, 33, 1) == 0);
+    // Osc 2/3 Pitch: two bytes in a program dump (low at 3/4, high at 38/39)
+    {
+        std::vector<uint8_t> prog (kProgramBytes);
+        prog[3] = 188; prog[38] = 2;   // 700, the centre
+        prog[4] = 120; prog[39] = 5;   // 1400, the top
+        prog[5] = 1;                   // Osc 1 Saw on
+        prog[33] = 0;                  // 2 Pole: 0 = on
+        CHECK (valueFromProgram (t[(size_t) indexOfNrpn (3)], prog) == 700);
+        CHECK (valueFromProgram (t[(size_t) indexOfNrpn (4)], prog) == 1400);
+        CHECK (valueFromProgram (t[(size_t) indexOfNrpn (5)], prog) == 1);
+        CHECK (valueFromProgram (t[(size_t) indexOfNrpn (33)], prog) == 1);
+        CHECK (valueFromProgram (t[(size_t) indexOfNrpn (3)], std::vector<uint8_t> (10)) == -1);
+        for (const auto& p : t)
+            CHECK (valueFromProgram (p, prog) >= 0);  // every parameter can be read from a dump now
+    }
+
     // Unison Voices: 0-6 shows as 1-6, Chord
     const auto& uni = t[(size_t) indexOfNrpn (96)];
     CHECK (formatValue (uni, 0) == "1" && formatValue (uni, 5) == "6" && formatValue (uni, 6) == "Chord");

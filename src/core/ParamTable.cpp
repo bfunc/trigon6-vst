@@ -57,6 +57,12 @@ ParamDef sawRamp (int nrpn, int nrpn2, const char* id, const char* name, S s)
     return p;
 }
 
+ParamDef wide (ParamDef p, int highByte)
+{
+    p.highByte = highByte;
+    return p;
+}
+
 ParamDef inverted (ParamDef p)
 {
     p.inverted = true;
@@ -86,8 +92,9 @@ std::vector<ParamDef> build()
         pick (0, "osc1_octave", "Osc 1 Octave", S::Oscillators, octaves),
         pick (1, "osc2_octave", "Osc 2 Octave", S::Oscillators, octaves),
         pick (2, "osc3_octave", "Osc 3 Octave", S::Oscillators, { "Lo", "-2", "-1", "0", "+1", "+2" }), // 0-5, checked on the synth
-        bip  (3, "osc2_pitch", "Osc 2 Pitch", S::Oscillators, 1400, 700),
-        bip  (4, "osc3_pitch", "Osc 3 Pitch", S::Oscillators, 1400, 700),
+        // high byte at 38 / 39: found in 1000 program dumps (2026-11-06), the pair never passes 1400, centre 700 = 2, 188
+        wide (bip (3, "osc2_pitch", "Osc 2 Pitch", S::Oscillators, 1400, 700), 38),
+        wide (bip (4, "osc3_pitch", "Osc 3 Pitch", S::Oscillators, 1400, 700), 39),
         onOff (5, "osc1_saw", "Osc 1 Saw", S::Oscillators),
         onOff (6, "osc2_saw", "Osc 2 Saw", S::Oscillators),
         sawRamp (7, 107, "osc3_saw", "Osc 3 Saw", S::Oscillators), // manual: "Osc 3 Saw Fall"; 107 is not in it
@@ -244,6 +251,27 @@ int valueFromBytes (const ParamDef& p, int atNrpn, int atNrpn2)
     if (p.nrpn2 < 0)
         return p.inverted ? (atNrpn == 0 ? 1 : 0) : atNrpn;
     return atNrpn == 0 ? 0 : (atNrpn2 == 0 ? 1 : 2);
+}
+
+int valueFromProgram (const ParamDef& p, const std::vector<uint8_t>& data)
+{
+    auto at = [&data] (int i) { return i >= 0 && (size_t) i < data.size() ? (int) data[(size_t) i] : -1; };
+    const int lo = at (p.nrpn);
+    if (lo < 0)
+        return -1;
+    if (p.highByte >= 0)
+    {
+        const int hi = at (p.highByte);
+        return hi < 0 ? -1 : hi * 256 + lo;
+    }
+    if (p.max > 255)
+        return -1;  // wider than a byte, and where its high byte sits is not known
+    if (p.nrpn2 >= 0)
+    {
+        const int b = at (p.nrpn2);
+        return b < 0 ? -1 : valueFromBytes (p, lo, b);
+    }
+    return valueFromBytes (p, lo, 0);
 }
 
 int valueAfterNrpn (const ParamDef& p, int current, int nrpn, int nrpnValue)

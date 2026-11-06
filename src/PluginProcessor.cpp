@@ -201,12 +201,12 @@ void Trigon6Processor::applySound (const std::vector<uint8_t>& data)
     for (size_t i = 0; i < table.size(); ++i)
     {
         const auto& p = table[i];
-        if (p.nrpn < 0 || (size_t) p.nrpn >= data.size() || (p.nrpn2 >= 0 && (size_t) p.nrpn2 >= data.size()) || p.max > 255)
+        const int v = t6::valueFromProgram (p, data);
+        if (v < 0)
         {
             skipped.add (p.name);
             continue;
         }
-        const int v = t6::valueFromBytes (p, data[(size_t) p.nrpn], p.nrpn2 >= 0 ? data[(size_t) p.nrpn2] : 0);
         if (v < p.min || v > p.max)
         {
             outOfRange.add (juce::String (p.name) + " " + juce::String (v));

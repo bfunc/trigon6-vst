@@ -2,6 +2,7 @@
 // Everything else (plugin parameters, NRPN sending, UI layout, tests) is built from it.
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,9 @@ struct ParamDef
     int nrpn2 = -1;
     // Bool only: the synth's value is the opposite of the button's light (2 Pole: NRPN 33 = 0 is 2-pole).
     bool inverted = false;
+    // A value wider than a byte (Osc 2/3 Pitch, 0-1400): in a program dump the low byte sits at `nrpn` and the
+    // high byte here. -1 = one byte.
+    int highByte = -1;
 };
 
 struct NrpnValue
@@ -62,6 +66,8 @@ std::vector<NrpnValue> nrpnValues (const ParamDef& p, int value);
 int valueAfterNrpn (const ParamDef& p, int current, int nrpn, int nrpnValue);
 // The parameter's value from a program's bytes at nrpn and nrpn2 (for a plain parameter, the first).
 int valueFromBytes (const ParamDef& p, int atNrpn, int atNrpn2);
+// The parameter's value in the 1024 unpacked program bytes; -1 when the dump does not hold it.
+int valueFromProgram (const ParamDef& p, const std::vector<uint8_t>& data);
 
 const std::vector<ParamDef>& paramTable();
 
