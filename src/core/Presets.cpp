@@ -69,6 +69,21 @@ int countDifferences (const std::vector<uint8_t>& a, const std::vector<uint8_t>&
     return n;
 }
 
+const std::vector<std::string>& programTypes()
+{
+    static const std::vector<std::string> types { "Bass", "Keys", "Brass", "Strings", "Choir", "Pad", "Lead",
+                                                  "Pluck", "Bell", "Arp/Seq", "Drum", "FX", "Other" };
+    return types;
+}
+
+std::string shownType (const std::string& userType, const std::string& name)
+{
+    if (! userType.empty())
+        return userType;
+    const auto t = programType (name);
+    return t.empty() ? "Other" : t;
+}
+
 std::string programType (const std::string& name)
 {
     std::vector<std::string> words;

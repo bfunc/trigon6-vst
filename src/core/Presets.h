@@ -34,6 +34,10 @@ int countDifferences (const std::vector<uint8_t>& a, const std::vector<uint8_t>&
 // A type guessed from the name ("Bamboo Bass" -> "Bass"); "" when the name gives no hint.
 // The synth itself stores no category.
 std::string programType (const std::string& name);
+// Every type programType can give, then "Other" (what the user can pick for a program without a type).
+const std::vector<std::string>& programTypes();
+// The type a filter sees: the one the user set, else the one from the name, else "Other".
+std::string shownType (const std::string& userType, const std::string& name);
 
 // "U 023", "F 412": how the synth shows a program.
 std::string programLabel (int bank, int program);

@@ -127,8 +127,9 @@ src/PluginProcessor.*   JUCE: parameters (APVTS) from the table, NRPN out in pro
 src/PluginEditor.*      JUCE: top bar, tabs, the panel
 src/ui/ConnectionPage.* JUCE: the Connection page
 src/ui/PresetsPage.*    JUCE: the Presets page (bank list, fetch, cache, .syx files)
-src/ui/SavePanel.*      JUCE: Save the current sound to a user slot, a .syx file, or both (backup + read-back)
+src/ui/SavePanel.*      JUCE: Save the current sound to a user slot, a .syx file, or both; Rename a program (backup + read-back)
 src/ui/AppSettings.h    the shared settings file, Documents folders
+src/ui/PresetTypes.h    the type the user set per program (kept in the settings file)
 src/core/Presets.*      program names and labels, file names, stored program dumps, fetch queue
 tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, globals, diagnosis rules, port names, table and layout
 ```

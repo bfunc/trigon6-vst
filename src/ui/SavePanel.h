@@ -1,4 +1,6 @@
 // Save the current sound: to a user slot on the synth, to a .syx file on the PC, or both.
+// Rename: the same panel for one stored program; its sound stays, only the name changes.
+// Both can set the program's type (kept on the PC, see PresetTypes.h).
 // Before a slot is written its old contents go to Documents\Trigon6 Control\Backups, and after the write the
 // slot is read back and compared. Factory banks are never offered.
 #pragma once
@@ -16,7 +18,8 @@
 class SavePanel : public juce::Component, private juce::Timer
 {
 public:
-    SavePanel (Trigon6Processor&, int bank, int program);
+    enum class Mode { Save, Rename };
+    SavePanel (Trigon6Processor&, int bank, int program, Mode = Mode::Save);
     ~SavePanel() override;
 
     std::function<void()> onClose;
@@ -48,6 +51,9 @@ private:
     void update();
 
     Trigon6Processor& proc;
+    const Mode mode;
+    bool renaming() const { return mode == Mode::Rename; }
+    juce::String chosenType() const;  // "" = from the name
     Target target = Target::Synth;
     Stage stage = Stage::Idle;
     double stageMs = 0;
@@ -63,10 +69,10 @@ private:
     std::vector<uint8_t> data;  // the sound being saved, with its new name
 
     juce::Rectangle<int> card;
-    juce::Label title, nameLabel, nameCount, targetLabel, slotLabel, slotInfo, slotWarn, folderLabel, folderPath, fileInfo, status;
+    juce::Label title, nameLabel, nameCount, targetLabel, slotLabel, slotInfo, slotWarn, typeLabel, folderLabel, folderPath, fileInfo, status;
     juce::TextEditor nameEdit;
     juce::TextButton synthButton { "Synth" }, pcButton { "PC" }, bothButton { "Synth + PC" };
-    juce::ComboBox bankBox, programBox;
+    juce::ComboBox bankBox, programBox, typeBox;
     juce::TextButton changeFolder { "Change..." }, cancelButton { "Cancel" }, saveButton { "Save" };
     std::unique_ptr<juce::FileChooser> chooser;
     juce::SharedResourcePointer<AppSettings> settings;

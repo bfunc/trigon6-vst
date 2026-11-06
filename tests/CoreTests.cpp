@@ -12,6 +12,7 @@
 #include "ui/PanelLayout.h"
 
 #include <cstdio>
+#include <algorithm>
 #include <map>
 #include <set>
 #include <string>
@@ -107,6 +108,15 @@ static void testSaveCore()
             CHECK (b < 0x80);
 
     CHECK (isWritableSlot (0, 0) && isWritableSlot (4, 99));
+    // every guessed type is in the list the user picks from
+    for (const char* n : { "Sub Bass", "Rhodes", "Brass Section", "Strings", "Vox", "Warm Pad", "Solo Lead", "Koto",
+                           "Bells", "Arp One", "Kick", "Siren" })
+    {
+        const auto t = programType (n);
+        CHECK (! t.empty() && std::find (programTypes().begin(), programTypes().end(), t) != programTypes().end());
+    }
+    CHECK (programTypes().back() == "Other");
+    CHECK (shownType ("", "Sub Bass") == "Bass" && shownType ("Lead", "Sub Bass") == "Lead" && shownType ("", "Mystery") == "Other");
     CHECK (! isWritableSlot (5, 0) && ! isWritableSlot (9, 99) && ! isWritableSlot (0, 100) && ! isWritableSlot (-1, 0));
     auto other = prog;
     other[200] ^= 1;

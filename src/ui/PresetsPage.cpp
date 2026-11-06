@@ -1,5 +1,6 @@
 #include "PresetsPage.h"
 
+#include "PresetTypes.h"
 #include "Theme.h"
 
 namespace
@@ -30,10 +31,9 @@ PresetsPage::PresetsPage (Trigon6Processor& p)
     bankBox.setSelectedId (1, juce::dontSendNotification);
     bankBox.onChange = [this]
     {
+        typeFilter = {};
         table.deselectAllRows();
-        table.updateContent();
-        table.repaint();
-        updateButtons();
+        rebuildRows();
     };
     addAndMakeVisible (bankBox);
 
@@ -62,8 +62,26 @@ PresetsPage::PresetsPage (Trigon6Processor& p)
     saveAllButton.onClick = [this] { saveAll(); };
     saveAsButton.setTooltip ("Write the selected program (or, with none selected, the current sound) to a .syx file");
     saveAsButton.onClick = [this] { saveAs(); };
-    for (auto* b : { &loadButton, &rereadButton, &fetchBankButton, &fetchAllButton, &cancelButton, &saveAllButton, &saveAsButton })
+    renameButton.setTooltip ("Give the selected program a new name on the synth (user banks; the old one is backed up first)");
+    renameButton.onClick = [this] { renameSelected(); };
+    typeButton.setTooltip ("Set the type of the selected programs (kept on this PC; right-click a row does the same)");
+    typeButton.onClick = [this] { showTypeMenu(); };
+    for (auto* b : { &loadButton, &rereadButton, &renameButton, &typeButton, &fetchBankButton, &fetchAllButton, &cancelButton,
+                     &saveAllButton, &saveAsButton })
         addAndMakeVisible (*b);
+
+    // Type filter: All, then each type. Clicking a program's type does the same.
+    juce::StringArray chipNames { "All" };
+    for (const auto& t : t6::programTypes())
+        chipNames.add (juce::String (t));
+    for (const auto& n : chipNames)
+    {
+        auto* c = chips.add (new juce::TextButton (n));
+        c->setTooltip (n == "All" ? juce::String ("Show the selected bank") : "Show every " + n + " program in all banks");
+        c->onClick = [this, n] { setFilter (n == "All" ? juce::String() : n); };
+        addAndMakeVisible (c);
+    }
+    settings->file->addChangeListener (this);
 
     addAndMakeVisible (progressBar);
     status.setColour (juce::Label::textColourId, theme::text);
@@ -74,19 +92,126 @@ PresetsPage::PresetsPage (Trigon6Processor& p)
     addAndMakeVisible (note);
 
     loadCache();
+    rebuildRows();
     programSeen = proc.getLink().programSeq();
     pcSeen = proc.getLink().lastProgramChange().seq;
     updateButtons();
     startTimerHz (20);
 }
 
-PresetsPage::~PresetsPage() { stopTimer(); }
+PresetsPage::~PresetsPage()
+{
+    settings->file->removeChangeListener (this);
+    stopTimer();
+}
 
 std::optional<std::pair<int, int>> PresetsPage::selectedSlot() const
 {
-    if (table.getNumSelectedRows() != 1)
+    if (table.getNumSelectedRows() != 1 || table.getSelectedRow() >= (int) rows.size())
         return std::nullopt;
-    return std::make_pair (currentBank(), table.getSelectedRow());
+    return slotOfRow (table.getSelectedRow());
+}
+
+std::pair<int, int> PresetsPage::slotOfRow (int row) const
+{
+    const int i = row >= 0 && row < (int) rows.size() ? rows[(size_t) row] : 0;
+    return { i / t6::kProgramsPerBank, i % t6::kProgramsPerBank };
+}
+
+juce::String PresetsPage::typeOf (int bank, int program)
+{
+    return presetTypes::shown (*settings->file, bank, program, entry (bank, program).name);
+}
+
+void PresetsPage::rebuildRows()
+{
+    std::vector<int> now;
+    if (typeFilter.isEmpty())
+        for (int p = 0; p < t6::kProgramsPerBank; ++p)
+            now.push_back (currentBank() * t6::kProgramsPerBank + p);
+    else
+        for (int b = 0; b < t6::kBankCount; ++b)
+            for (int p = 0; p < t6::kProgramsPerBank; ++p)
+                if (! entry (b, p).sysex.empty() && typeOf (b, p) == typeFilter)
+                    now.push_back (b * t6::kProgramsPerBank + p);
+    if (now != rows)
+    {
+        rows = std::move (now);
+        table.deselectAllRows();
+        table.updateContent();
+    }
+    for (auto* c : chips)
+        c->setToggleState (c->getButtonText() == (typeFilter.isEmpty() ? juce::String ("All") : typeFilter), juce::dontSendNotification);
+    if (typeFilter.isNotEmpty())
+        status.setText (typeFilter + ": " + juce::String ((int) rows.size()) + " programs in all banks. All shows the bank again.",
+                        juce::dontSendNotification);
+    table.repaint();
+    updateButtons();
+}
+
+void PresetsPage::setFilter (const juce::String& type)
+{
+    typeFilter = type;
+    if (type.isEmpty())
+        status.setText ({}, juce::dontSendNotification);
+    rebuildRows();
+}
+
+void PresetsPage::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    rebuildRows();  // a type was set
+}
+
+void PresetsPage::showTypeMenu()
+{
+    if (table.getNumSelectedRows() == 0)
+        return;
+    juce::PopupMenu m;
+    const bool one = table.getNumSelectedRows() == 1;
+    if (one)
+    {
+        const auto slot = slotOfRow (table.getSelectedRow());
+        m.addItem (1, "Rename...", t6::isWritableSlot (slot.first, slot.second) && ! entry (slot.first, slot.second).sysex.empty());
+        m.addSeparator();
+    }
+    m.addSectionHeader (one ? juce::String ("Type") : "Type of the " + juce::String (table.getNumSelectedRows()) + " programs");
+    m.addItem (2, "From the name");
+    const auto& types = t6::programTypes();
+    for (size_t i = 0; i < types.size(); ++i)
+        m.addItem (10 + (int) i, juce::String (types[i]));
+    m.showMenuAsync (juce::PopupMenu::Options(), [this] (int id)
+    {
+        if (id == 1)
+            renameSelected();
+        else if (id == 2)
+            setTypeForSelected ({});
+        else if (id >= 10 && id < 10 + (int) t6::programTypes().size())
+            setTypeForSelected (juce::String (t6::programTypes()[(size_t) (id - 10)]));
+    });
+}
+
+void PresetsPage::setTypeForSelected (const juce::String& type)
+{
+    const auto selected = table.getSelectedRows();
+    std::vector<std::pair<int, int>> slots;
+    for (int i = 0; i < selected.size(); ++i)
+        slots.push_back (slotOfRow (selected[i]));
+    for (const auto& slot : slots)
+        if (! entry (slot.first, slot.second).sysex.empty())
+            presetTypes::set (*settings->file, slot.first, slot.second, entry (slot.first, slot.second).name, type);
+}
+
+void PresetsPage::renameSelected()
+{
+    const auto slot = selectedSlot();
+    if (! slot || ! onRename)
+        return;
+    if (! t6::isWritableSlot (slot->first, slot->second))
+    {
+        status.setText ("Factory programs can't be renamed. Save the sound into a user slot instead.", juce::dontSendNotification);
+        return;
+    }
+    onRename (slot->first, slot->second);
 }
 
 int PresetsPage::currentBank() const { return juce::jlimit (0, t6::kBankCount - 1, bankBox.getSelectedId() - 1); }
@@ -198,10 +323,14 @@ void PresetsPage::timerCallback()
         updateButtons();
     }
     if (changed)
+    {
+        if (typeFilter.isNotEmpty())
+            rebuildRows();
         table.repaint();
+    }
 }
 
-int PresetsPage::getNumRows() { return t6::kProgramsPerBank; }
+int PresetsPage::getNumRows() { return (int) rows.size(); }
 
 void PresetsPage::paintRowBackground (juce::Graphics& g, int row, int, int, bool selected)
 {
@@ -210,21 +339,52 @@ void PresetsPage::paintRowBackground (juce::Graphics& g, int row, int, int, bool
 
 void PresetsPage::paintCell (juce::Graphics& g, int row, int column, int width, int height, bool)
 {
-    if (row < 0 || row >= t6::kProgramsPerBank)
+    if (row < 0 || row >= (int) rows.size())
         return;
-    const auto& e = entry (currentBank(), row);
+    const auto slot = slotOfRow (row);
+    const int bank = slot.first, program = slot.second;
+    const auto& e = entry (bank, program);
     juce::String text;
     g.setColour (theme::text);
     switch (column)
     {
-        case kProgramColumn: text = juce::String (t6::programLabel (currentBank(), row)); g.setColour (theme::dim); break;
+        case kProgramColumn: text = juce::String (t6::programLabel (bank, program)); g.setColour (theme::dim); break;
         case kNameColumn:    text = juce::String (e.name); break;
-        case kTypeColumn:    text = juce::String (t6::programType (e.name)); g.setColour (theme::dim); break;
+        case kTypeColumn:
+            if (! e.sysex.empty())
+            {
+                // set by the user: bright; from the name: dim
+                const bool own = presetTypes::user (*settings->file, bank, program, e.name).isNotEmpty();
+                text = typeOf (bank, program);
+                g.setColour (own ? theme::text : theme::dim);
+            }
+            break;
         case kStatusColumn:  text = t6::statusName (e.status); g.setColour (statusColour (e.status)); break;
         default: break;
     }
     g.setFont (juce::FontOptions (14.0f));
     g.drawText (text, 6, 0, width - 8, height, juce::Justification::centredLeft, true);
+}
+
+void PresetsPage::cellClicked (int row, int column, const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+    {
+        if (! table.isRowSelected (row))
+            table.selectRow (row);
+        showTypeMenu();
+        return;
+    }
+    // A click on a program's type shows that type in all banks (again: back to the bank).
+    if (column == kTypeColumn && row >= 0 && row < (int) rows.size())
+    {
+        const auto slot = slotOfRow (row);
+        if (! entry (slot.first, slot.second).sysex.empty())
+        {
+            const auto t = typeOf (slot.first, slot.second);
+            setFilter (t == typeFilter ? juce::String() : t);
+        }
+    }
 }
 
 void PresetsPage::cellDoubleClicked (int row, int, const juce::MouseEvent&)
@@ -237,12 +397,12 @@ void PresetsPage::selectedRowsChanged (int) { updateButtons(); }
 
 void PresetsPage::loadSelected()
 {
-    const int row = table.getSelectedRow();
-    if (row < 0)
+    const auto slot = selectedSlot();
+    if (! slot)
         return;
-    const int bank = currentBank();
-    proc.getLink().sendProgramChange (proc.getMidiChannel(), bank, row);
-    status.setText ("Loaded " + juce::String (t6::programLabel (bank, row)) + " " + juce::String (entry (bank, row).name) + " on the synth.",
+    const int bank = slot->first, program = slot->second;
+    proc.getLink().sendProgramChange (proc.getMidiChannel(), bank, program);
+    status.setText ("Loaded " + juce::String (t6::programLabel (bank, program)) + " " + juce::String (entry (bank, program).name) + " on the synth.",
                     juce::dontSendNotification);
     // Then read the new sound into the panel, once the synth has switched.
     juce::Timer::callAfterDelay (300, [safe = juce::Component::SafePointer<PresetsPage> (this)]
@@ -254,9 +414,12 @@ void PresetsPage::loadSelected()
 
 void PresetsPage::rereadSelected()
 {
-    const auto rows = table.getSelectedRows();
-    for (int i = 0; i < rows.size(); ++i)
-        queue.enqueue (currentBank(), rows[i]);
+    const auto selected = table.getSelectedRows();
+    for (int i = 0; i < selected.size(); ++i)
+    {
+        const auto slot = slotOfRow (selected[i]);
+        queue.enqueue (slot.first, slot.second);
+    }
     updateButtons();
 }
 
@@ -303,7 +466,7 @@ void PresetsPage::saveAll()
                 if (file.replaceWithData (e.sysex.data(), e.sysex.size()))
                 {
                     ++written;
-                    index << juce::String (t6::programLabel (b, p)) << "\t" << b << "\t" << p << "\t" << juce::String (e.name) << "\t" << juce::String (t6::programType (e.name)) << "\t"
+                    index << juce::String (t6::programLabel (b, p)) << "\t" << b << "\t" << p << "\t" << juce::String (e.name) << "\t" << typeOf (b, p) << "\t"
                           << file.getFileName() << "\n";
                 }
             }
@@ -318,11 +481,12 @@ void PresetsPage::saveAs()
 {
     std::vector<uint8_t> sysex;
     juce::String name;
-    const int row = table.getSelectedRow();
-    if (row >= 0 && ! entry (currentBank(), row).sysex.empty())
+    const auto slot = selectedSlot();
+    const int row = slot ? 0 : -1;
+    if (slot && ! entry (slot->first, slot->second).sysex.empty())
     {
-        sysex = entry (currentBank(), row).sysex;
-        name = entry (currentBank(), row).name;
+        sysex = entry (slot->first, slot->second).sysex;
+        name = entry (slot->first, slot->second).name;
     }
     else
     {
@@ -370,6 +534,9 @@ void PresetsPage::updateButtons()
     const bool busy = queue.busy();
     const bool one = table.getNumSelectedRows() == 1;
     loadButton.setEnabled (one);
+    const auto slot = selectedSlot();
+    renameButton.setEnabled (slot && t6::isWritableSlot (slot->first, slot->second) && ! entry (slot->first, slot->second).sysex.empty());
+    typeButton.setEnabled (table.getNumSelectedRows() > 0);
     rereadButton.setEnabled (table.getNumSelectedRows() > 0);
     fetchBankButton.setEnabled (! busy);
     fetchAllButton.setEnabled (! busy);
@@ -384,9 +551,9 @@ void PresetsPage::resized()
     auto top = r.removeFromTop (30);
     bankBox.setBounds (top.removeFromLeft (260));
     top.removeFromLeft (10);
-    for (auto* b : { &loadButton, &rereadButton })
+    for (auto* b : { &loadButton, &rereadButton, &renameButton, &typeButton })
     {
-        b->setBounds (top.removeFromLeft (90));
+        b->setBounds (top.removeFromLeft (96));
         top.removeFromLeft (6);
     }
     for (auto* b : { &saveAsButton, &saveAllButton })
@@ -395,6 +562,11 @@ void PresetsPage::resized()
         top.removeFromRight (6);
     }
 
+    r.removeFromTop (8);
+    auto chipRow = r.removeFromTop (26);
+    const int chipW = juce::jmin (90, chipRow.getWidth() / juce::jmax (1, chips.size()));
+    for (auto* c : chips)
+        c->setBounds (chipRow.removeFromLeft (chipW).reduced (2, 0));
     r.removeFromTop (8);
     auto bottom = r.removeFromBottom (24);
     note.setBounds (bottom);

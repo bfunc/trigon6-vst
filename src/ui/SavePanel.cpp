@@ -1,5 +1,6 @@
 #include "SavePanel.h"
 
+#include "PresetTypes.h"
 #include "Theme.h"
 #include "core/Presets.h"
 #include "core/Sysex.h"
@@ -28,7 +29,7 @@ bool writeFile (const juce::File& f, const std::vector<uint8_t>& bytes)
 }
 } // namespace
 
-SavePanel::SavePanel (Trigon6Processor& p, int defaultBank, int defaultProgram) : proc (p)
+SavePanel::SavePanel (Trigon6Processor& p, int defaultBank, int defaultProgram, Mode m) : proc (p), mode (m)
 {
     setWantsKeyboardFocus (true);
 
@@ -47,6 +48,7 @@ SavePanel::SavePanel (Trigon6Processor& p, int defaultBank, int defaultProgram) 
     setup (slotLabel, "Slot", theme::dim);
     setup (slotInfo, "", theme::text);
     setup (slotWarn, "", theme::warn, 13.0f);
+    setup (typeLabel, "Type", theme::dim);
     setup (folderLabel, "Folder", theme::dim);
     setup (folderPath, "", theme::text, 13.0f);
     folderPath.setMinimumHorizontalScale (0.6f);
@@ -85,6 +87,13 @@ SavePanel::SavePanel (Trigon6Processor& p, int defaultBank, int defaultProgram) 
     const bool writable = t6::isWritableSlot (defaultBank, defaultProgram);
     bankBox.setSelectedId ((writable ? defaultBank : 0) + 1, juce::dontSendNotification);
     programBox.setSelectedId ((writable ? defaultProgram : 0) + 1, juce::dontSendNotification);
+    typeBox.addItem ("From the name", 1);
+    for (size_t i = 0; i < t6::programTypes().size(); ++i)
+        typeBox.addItem (juce::String (t6::programTypes()[i]), (int) i + 2);
+    typeBox.setSelectedId (1, juce::dontSendNotification);
+    typeBox.setTooltip ("The type the Presets list shows and filters by (kept on this PC; the synth has no types)");
+    addAndMakeVisible (typeBox);
+
     bankBox.onChange = [this] { readSlot(); };
     programBox.onChange = [this] { readSlot(); };
     addAndMakeVisible (bankBox);
@@ -96,17 +105,30 @@ SavePanel::SavePanel (Trigon6Processor& p, int defaultBank, int defaultProgram) 
     for (auto* b : { &changeFolder, &cancelButton, &saveButton })
         addAndMakeVisible (*b);
 
-    const auto stored = settings->file->getValue ("saveTarget", "synth");
-    setTarget (stored == "pc" ? Target::Pc : stored == "both" ? Target::Both : Target::Synth, false);
-
-    // The current sound (for its name) and what the slot holds now.
     auto& link = proc.getLink();
     programSeen = link.programSeq();
-    soundSeqAtRequest = link.editBufferSeq();
-    stage = Stage::ReadSound;
-    stageMs = nowMs();
-    tries = 0;
-    link.requestEditBuffer();
+    if (renaming())
+    {
+        // One stored program, synth only: no target, no PC part, the slot fixed.
+        title.setText ("RENAME " + slotText (bank(), program()), juce::dontSendNotification);
+        target = Target::Synth;
+        for (auto* c : std::initializer_list<juce::Component*> { &targetLabel, &synthButton, &pcButton, &bothButton, &folderLabel,
+                                                                &folderPath, &fileInfo, &changeFolder })
+            c->setVisible (false);
+        status.setText ({}, juce::dontSendNotification);
+    }
+    else
+    {
+        const auto stored = settings->file->getValue ("saveTarget", "synth");
+        setTarget (stored == "pc" ? Target::Pc : stored == "both" ? Target::Both : Target::Synth, false);
+        // The current sound, for its name.
+        soundSeqAtRequest = link.editBufferSeq();
+        stage = Stage::ReadSound;
+        stageMs = nowMs();
+        tries = 0;
+        link.requestEditBuffer();
+    }
+    // What the slot holds now.
     readSlot();
     update();
     startTimerHz (20);
@@ -173,11 +195,30 @@ void SavePanel::chooseFolder()
     });
 }
 
+juce::String SavePanel::chosenType() const
+{
+    const int id = typeBox.getSelectedId();
+    return id >= 2 && id - 2 < (int) t6::programTypes().size() ? juce::String (t6::programTypes()[(size_t) (id - 2)]) : juce::String();
+}
+
 void SavePanel::startSave()
 {
     if (nameEdit.getText().trim().isEmpty())
     {
         finish ("Give the sound a name first.", theme::warn);
+        return;
+    }
+    if (renaming())
+    {
+        // Read the slot fresh: its bytes are what gets written back, with the new name.
+        stage = Stage::ReadSlot;
+        stageMs = nowMs();
+        tries = 0;
+        saving = true;
+        proc.getLink().requestProgram (bank(), program());
+        status.setText ("Reading " + slotText (bank(), program()) + "...", juce::dontSendNotification);
+        status.setColour (juce::Label::textColourId, theme::dim);
+        update();
         return;
     }
     // Read the sound again: it may have changed since the panel opened.
@@ -243,6 +284,11 @@ void SavePanel::soundArrived()
 
 void SavePanel::slotArrived (const t6::StoredProgram& old)
 {
+    if (renaming())
+    {
+        data = old.data;
+        t6::setProgramName (data, nameEdit.getText().trim().toStdString());
+    }
     const auto stamp = juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S");
     const auto backup = documentsFolder ("Backups").getChildFile (stamp + " " + juce::String (t6::presetFileName (bank(), program(), old.name)));
     if (! writeFile (backup, old.sysex))
@@ -262,7 +308,13 @@ void SavePanel::verifyArrived (const t6::StoredProgram& back)
     const int diff = t6::countDifferences (back.data, data);
     const auto where = slotText (bank(), program()) + " " + juce::String (back.name);
     if (diff == 0)
-        finish ("Saved to " + where + " on the synth (read back: the same)." + (toPc() ? " The file is saved too." : ""), theme::ok);
+    {
+        presetTypes::set (*settings->file, bank(), program(), back.name, chosenType());
+        if (renaming())
+            finish ("Renamed: " + where + " (read back: the same).", theme::ok);
+        else
+            finish ("Saved to " + where + " on the synth (read back: the same)." + (toPc() ? " The file is saved too." : ""), theme::ok);
+    }
     else
         finish ("Written to " + slotText (bank(), program()) + ", but reading it back gave " + juce::String (diff)
                     + " different bytes. The old sound is in Backups.", theme::warn);
@@ -297,8 +349,23 @@ void SavePanel::timerCallback()
             verifyArrived (sp);
         else if (stage != Stage::Write)
         {
+            const bool first = slotState != SlotState::Known;
             slotState = SlotState::Known;
             slotName = juce::String (sp.name);
+            if (renaming() && first)
+            {
+                // Start from the program's own name and type.
+                if (nameEdit.getText().isEmpty())
+                {
+                    nameEdit.setText (slotName, juce::dontSendNotification);
+                    nameEdit.selectAll();
+                }
+                const auto own = presetTypes::user (*settings->file, bank(), program(), sp.name);
+                const auto& types = t6::programTypes();
+                for (size_t i = 0; i < types.size(); ++i)
+                    if (own == juce::String (types[i]))
+                        typeBox.setSelectedId ((int) i + 2, juce::dontSendNotification);
+            }
             update();
         }
     }
@@ -383,30 +450,32 @@ void SavePanel::update()
             break;
     }
     slotInfo.setColour (juce::Label::textColourId, slotState == SlotState::NoReply ? theme::bad : theme::text);
-    slotWarn.setText (slotState == SlotState::Known
-                          ? "Saving replaces \"" + (slotName.isNotEmpty() ? slotName : slot) + "\". It goes to Documents\\Trigon6 Control\\Backups first."
-                          : juce::String(),
+    slotWarn.setText (slotState != SlotState::Known ? juce::String()
+                      : renaming() ? "Only the name changes. " + slot + " goes to Documents\\Trigon6 Control\\Backups first."
+                                   : "Saving replaces \"" + (slotName.isNotEmpty() ? slotName : slot) + "\". It goes to Documents\\Trigon6 Control\\Backups first.",
                       juce::dontSendNotification);
 
     folderPath.setText (folder().getFullPathName(), juce::dontSendNotification);
     fileInfo.setText (name.isNotEmpty() ? "File: " + pcFile().getFileName() : juce::String ("File: (needs a name)"), juce::dontSendNotification);
 
     const bool synthOn = toSynth(), pcOn = toPc();
-    for (auto* c : std::initializer_list<juce::Component*> { &slotLabel, &bankBox, &programBox, &slotInfo, &slotWarn })
+    for (auto* c : std::initializer_list<juce::Component*> { &slotLabel, &bankBox, &programBox, &slotInfo, &slotWarn, &typeLabel, &typeBox })
         c->setAlpha (synthOn ? 1.0f : 0.35f);
     for (auto* c : std::initializer_list<juce::Component*> { &folderLabel, &folderPath, &fileInfo, &changeFolder })
         c->setAlpha (pcOn ? 1.0f : 0.35f);
-    bankBox.setEnabled (synthOn && ! busy);
-    programBox.setEnabled (synthOn && ! busy);
+    bankBox.setEnabled (synthOn && ! busy && ! renaming());
+    programBox.setEnabled (synthOn && ! busy && ! renaming());
+    typeBox.setEnabled (synthOn && ! busy);
     changeFolder.setEnabled (pcOn && ! busy);
     nameEdit.setReadOnly (busy);
     for (auto* b : { &synthButton, &pcButton, &bothButton })
         b->setEnabled (! busy);
 
-    saveButton.setButtonText (target == Target::Synth ? "Save to synth" : target == Target::Pc ? "Save to PC" : "Save to both");
+    saveButton.setButtonText (renaming() ? "Rename on synth"
+                              : target == Target::Synth ? "Save to synth" : target == Target::Pc ? "Save to PC" : "Save to both");
     // Writing a slot needs its old contents read first (for the backup).
     saveButton.setEnabled (! busy && name.isNotEmpty() && (! synthOn || slotState == SlotState::Known));
-    cancelButton.setButtonText (status.getText().startsWith ("Saved") ? "Close" : "Cancel");
+    cancelButton.setButtonText (status.getText().startsWith ("Saved") || status.getText().startsWith ("Renamed") ? "Close" : "Cancel");
 }
 
 bool SavePanel::keyPressed (const juce::KeyPress& k)
@@ -439,12 +508,13 @@ void SavePanel::paint (juce::Graphics& g)
         g.drawText (text, r.getX(), y + 4, 200, 16, juce::Justification::centredLeft);
     };
     rule (slotLabel.getY() - 26, "ON THE SYNTH");
-    rule (folderLabel.getY() - 26, "ON THE PC");
+    if (! renaming())
+        rule (folderLabel.getY() - 26, "ON THE PC");
 }
 
 void SavePanel::resized()
 {
-    card = getLocalBounds().withSizeKeepingCentre (juce::jmin (640, getWidth() - 40), juce::jmin (470, getHeight() - 40));
+    card = getLocalBounds().withSizeKeepingCentre (juce::jmin (640, getWidth() - 40), juce::jmin (renaming() ? 400 : 510, getHeight() - 40));
     auto r = card.reduced (24);
     const int labelW = 70;
 
@@ -457,12 +527,15 @@ void SavePanel::resized()
     nameEdit.setBounds (row.reduced (0, 1));
     r.removeFromTop (12);
 
-    row = r.removeFromTop (30);
-    targetLabel.setBounds (row.removeFromLeft (labelW));
-    for (auto* b : { &synthButton, &pcButton, &bothButton })
+    if (! renaming())
     {
-        b->setBounds (row.removeFromLeft (120));
-        row.removeFromLeft (6);
+        row = r.removeFromTop (30);
+        targetLabel.setBounds (row.removeFromLeft (labelW));
+        for (auto* b : { &synthButton, &pcButton, &bothButton })
+        {
+            b->setBounds (row.removeFromLeft (120));
+            row.removeFromLeft (6);
+        }
     }
     r.removeFromTop (34);
 
@@ -474,14 +547,18 @@ void SavePanel::resized()
     r.removeFromTop (4);
     slotInfo.setBounds (r.removeFromTop (22).withTrimmedLeft (labelW));
     slotWarn.setBounds (r.removeFromTop (20).withTrimmedLeft (labelW));
+    r.removeFromTop (6);
+    row = r.removeFromTop (28);
+    typeLabel.setBounds (row.removeFromLeft (labelW));
+    typeBox.setBounds (row.removeFromLeft (200));
     r.removeFromTop (34);
 
-    row = r.removeFromTop (28);
+    row = renaming() ? juce::Rectangle<int>() : r.removeFromTop (28);
     folderLabel.setBounds (row.removeFromLeft (labelW));
     changeFolder.setBounds (row.removeFromRight (96));
     row.removeFromRight (6);
     folderPath.setBounds (row);
-    fileInfo.setBounds (r.removeFromTop (22).withTrimmedLeft (labelW));
+    fileInfo.setBounds (renaming() ? juce::Rectangle<int>() : r.removeFromTop (22).withTrimmedLeft (labelW));
 
     auto buttons = r.removeFromBottom (32);
     saveButton.setBounds (buttons.removeFromRight (150));

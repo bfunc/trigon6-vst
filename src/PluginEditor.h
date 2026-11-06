@@ -32,6 +32,7 @@ private:
     juce::TextButton getSound { "Get sound" };
     juce::TextButton save { "Save" };
     void openSave();
+    void openPanel (int bank, int program, bool rename);
     std::unique_ptr<SavePanel> savePanel;
     PresetsPage* presetsPage = nullptr;  // owned by tabs
     class Tabs;

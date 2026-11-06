@@ -460,6 +460,7 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     tabs->addTab ("Connection", colours::background, connection, true);
     tabs->addTab ("Panel", hw::col::panel, new PanelPage (proc.apvts), true);
     presetsPage = new PresetsPage (proc);
+    presetsPage->onRename = [this] (int bank, int program) { openPanel (bank, program, true); };
     tabs->addTab ("Presets", colours::background, presetsPage, true);
     tabs->show (connection->getReport().allOk ? 1 : 0);
     // Just after opening (the standalone app checks the synth on start), move to the panel once all is green.
@@ -532,8 +533,6 @@ void Trigon6Editor::resized()
 
 void Trigon6Editor::openSave()
 {
-    if (savePanel != nullptr)
-        return;
     // The default slot: the program selected on the Presets tab, else the one last picked on the synth.
     int bank = 0, program = 0;
     const auto pc = proc.getLink().lastProgramChange();
@@ -541,7 +540,14 @@ void Trigon6Editor::openSave()
         std::tie (bank, program) = *presetsPage->selectedSlot();
     else if (pc.seq != 0)
         std::tie (bank, program) = std::make_pair (pc.bank, pc.program);
-    savePanel = std::make_unique<SavePanel> (proc, bank, program);
+    openPanel (bank, program, false);
+}
+
+void Trigon6Editor::openPanel (int bank, int program, bool rename)
+{
+    if (savePanel != nullptr)
+        return;
+    savePanel = std::make_unique<SavePanel> (proc, bank, program, rename ? SavePanel::Mode::Rename : SavePanel::Mode::Save);
     savePanel->onClose = [safe = juce::Component::SafePointer<Trigon6Editor> (this)]
     {
         juce::MessageManager::callAsync ([safe]
