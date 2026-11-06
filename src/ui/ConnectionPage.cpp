@@ -348,7 +348,7 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
     r.removeFromBottom (8);
 
     // The settings with GLOBALS pressed once; the info box below explains the hovered or clicked button.
-    const int rowH = juce::jmin (r.getHeight(), 190);
+    const int rowH = juce::jmin (r.getHeight(), 140);
     {
         const int row = 0;
         auto cells = r.removeFromTop (rowH);
