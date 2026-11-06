@@ -8,6 +8,7 @@
 #include "core/Presets.h"
 #include "core/ParamTable.h"
 #include "core/SendQueue.h"
+#include "core/SoundSync.h"
 #include "core/Sysex.h"
 #include "ui/PanelLayout.h"
 
@@ -82,6 +83,84 @@ static void testNrpnDecode()
     d2.feed (6, 1);
     e = d2.feed (38, 0);
     CHECK (e && e->param == 45 && e->value == 128);
+}
+
+// The "saved / edited" indicator: the current values against a stored program and the last PC file.
+static void testSoundSync()
+{
+    const auto& table = t6::paramTable();
+    std::vector<uint8_t> stored (t6::kProgramBytes, 0);
+    t6::setProgramName (stored, "Bright Bass");
+    std::vector<int> values;
+    for (const auto& p : table)
+    {
+        const auto v = t6::valueInProgram (p, stored);
+        values.push_back (v ? *v : p.min);
+    }
+    CHECK (t6::compareSound (stored, values, "Bright Bass").same());
+    CHECK (t6::compareSound (stored, values, "").same());       // name unknown: not compared
+    CHECK (t6::compareSound (stored, values, "Dark Bass").name);  // a name change counts
+
+    // one parameter that the bytes hold, moved
+    size_t k = 0;
+    while (k < table.size() && ! t6::valueInProgram (table[k], stored))
+        ++k;
+    CHECK (k < table.size());
+    auto edited = values;
+    edited[k] = edited[k] == table[k].max ? table[k].min : edited[k] + 1;
+    const auto d = t6::compareSound (stored, edited, "Bright Bass");
+    CHECK (d.count() == 1 && d.params.size() == 1 && d.params[0] == k);
+
+    t6::SyncInput in;
+    CHECK (t6::syncStatus (in).state == t6::SyncState::NoSlot);
+    in.slotKnown = true;
+    in.bank = 0;
+    in.program = 12;
+    CHECK (t6::syncStatus (in).state == t6::SyncState::NotRead);
+    in.checking = true;
+    CHECK (t6::syncStatus (in).state == t6::SyncState::Checking);
+    in.checking = false;
+    in.slotData = stored;
+    in.values = values;
+    in.name = "Bright Bass";
+    auto r = t6::syncStatus (in);
+    CHECK (r.state == t6::SyncState::InSync && r.text == "Saved in U 012");
+    in.values = edited;
+    r = t6::syncStatus (in);
+    CHECK (r.state == t6::SyncState::Edited && r.text == "Edited - 1 change");
+    CHECK (r.tooltip.find (table[k].name) != std::string::npos);
+
+    // saved to the PC with the edit: PC only; renamed in that file too: still PC only
+    auto pc = stored;
+    const auto at = (size_t) table[k].nrpn;
+    pc[at] = (uint8_t) (table[k].nrpn2 < 0 ? edited[k] : pc[at]);
+    if (table[k].nrpn2 < 0 && ! table[k].inverted)
+    {
+        in.pcData = pc;
+        CHECK (t6::syncStatus (in).state == t6::SyncState::PcOnly);
+        t6::setProgramName (in.pcData, "Brighter Bass");
+        in.name = "Brighter Bass";
+        r = t6::syncStatus (in);
+        CHECK (r.state == t6::SyncState::PcOnly && r.diff.count() == 2);
+    }
+
+    // the synth does not send knob moves: the state stays, the text says it is not sure
+    in.pcData.clear();
+    in.name = "Bright Bass";
+    in.values = values;
+    in.seesSynthKnobs = false;
+    r = t6::syncStatus (in);
+    CHECK (r.state == t6::SyncState::InSync && r.text == "Saved in U 012 ?");
+
+    // FetchQueue.pending: the slot being waited for, and queued ones
+    t6::FetchQueue q;
+    q.enqueue (0, 12);
+    q.enqueue (0, 13);
+    CHECK (q.pending (0, 12) && q.pending (0, 13) && ! q.pending (0, 14));
+    q.poll (0.0);
+    CHECK (q.pending (0, 12));
+    q.received (0, 12);
+    CHECK (! q.pending (0, 12) && q.pending (0, 13));
 }
 
 static void testSaveCore()
@@ -646,6 +725,7 @@ int main()
     testNrpnDecode();
     testPacked();
     testSaveCore();
+    testSoundSync();
     testSysex();
     testSendQueue();
     testTable();

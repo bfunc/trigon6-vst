@@ -266,6 +266,7 @@ void SavePanel::soundArrived()
             return;
         }
         saved = file.getFullPathName();
+        proc.noteSavedToPc (data);
         if (! toSynth())
         {
             finish ("Saved to " + saved, theme::ok);
@@ -310,6 +311,10 @@ void SavePanel::verifyArrived (const t6::StoredProgram& back)
     if (diff == 0)
     {
         presetTypes::set (*settings->file, bank(), program(), back.name, chosenType());
+        // The top bar's indicator: a saved sound now lives in this slot; a rename of the current slot renames the sound.
+        const auto& o = proc.getOrigin();
+        if (! renaming() || (o.slotKnown && o.bank == bank() && o.program == program()))
+            proc.noteSavedToSynth (bank(), program(), back.name);
         if (renaming())
             finish ("Renamed: " + where + " (read back: the same).", theme::ok);
         else

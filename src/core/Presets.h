@@ -97,6 +97,7 @@ public:
     bool received (int bank, int program);  // a dump arrived; true when it was the one being waited for
 
     bool busy() const { return waiting.has_value() || ! jobs.empty(); }
+    bool pending (int bank, int program) const;  // waiting for its reply, or still queued
     int finished() const { return done; }
     int total() const { return count; }
     int failed() const { return failures; }

@@ -27,6 +27,8 @@ private:
     hw::Look look;
     juce::TooltipWindow tooltips { this, 600 };
     juce::Label channelLabel, status, soundStatus;
+    juce::Label sync;  // is the current sound saved: "Saved in U 012", "Edited - 3 changes", "Saved on PC only"
+    void updateSync();
     juce::ComboBox channel;
     juce::TextButton sendAll { "Send all" };
     juce::TextButton getSound { "Get sound" };

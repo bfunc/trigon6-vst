@@ -51,6 +51,22 @@ public:
     juce::String getSoundStatus() const { return soundStatus; }  // message thread
     int getSentCount() const { return sentCount.load(); }
 
+    // Where the current sound came from, for the "saved / edited" indicator (message thread).
+    // The slot is set by a program picked on the synth, Load on the Presets tab, or a save into a slot;
+    // a program change also reads the new sound (Get sound) after a moment.
+    struct SoundOrigin
+    {
+        bool slotKnown = false;
+        int bank = 0, program = 0;
+        std::string name;             // the sound's name: from Get sound or the last save; "" = not known
+        std::vector<uint8_t> pcData;  // the last .syx saved to the PC since the slot was picked
+    };
+    const SoundOrigin& getOrigin() const { return origin; }
+    void loadProgram (int bank, int program);  // program change + read the new sound
+    void noteSavedToSynth (int bank, int program, const std::string& name);
+    void noteSavedToPc (const std::vector<uint8_t>& data);  // 1024 bytes, name included
+    std::vector<int> currentValues() const;                 // NRPN values, one per paramTable() entry
+
     SynthLink& getLink() { return *link; }
     bool isHostOutput() const { return link->isHostOutput(); }
     void setHostOutput (bool host);
@@ -94,6 +110,10 @@ private:
     uint32_t soundSeq = 0;
     double soundAskedMs = 0;
     juce::String soundStatus;
+    SoundOrigin origin;
+    uint32_t pcSeen = 0;          // message thread: last SynthLink program change handled
+    double autoGetSoundMs = -1;   // message thread: when to read the sound after a program change
+    void setSlot (int bank, int program);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Trigon6Processor)
 };

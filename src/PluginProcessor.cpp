@@ -3,6 +3,7 @@
 #include "PluginEditor.h"
 #include "core/Nrpn.h"
 #include "core/ParamTable.h"
+#include "core/Presets.h"
 
 namespace
 {
@@ -63,6 +64,7 @@ Trigon6Processor::Trigon6Processor()
     // The standalone app talks to the synth's port itself; in a DAW the host routes the plugin's MIDI out.
     setHostOutput (! isStandalone());
     incomingSeen = link->incomingSeq();
+    pcSeen = link->lastProgramChange().seq;
     pump.startThread();
     startTimerHz (30);
 }
@@ -75,6 +77,23 @@ Trigon6Processor::~Trigon6Processor()
 
 void Trigon6Processor::timerCallback()
 {
+    // A program picked on the synth's panel: that slot is now the origin; read the new sound shortly.
+    const auto pc = link->lastProgramChange();
+    if (pc.seq != pcSeen)
+    {
+        pcSeen = pc.seq;
+        if (pc.channel == midiChannel.load())
+        {
+            setSlot (pc.bank, pc.program);
+            autoGetSoundMs = juce::Time::getMillisecondCounterHiRes() + 300.0;
+        }
+    }
+    if (autoGetSoundMs > 0 && juce::Time::getMillisecondCounterHiRes() >= autoGetSoundMs && ! soundPending)
+    {
+        autoGetSoundMs = -1;
+        requestGetSound();
+    }
+
     if (soundPending)
     {
         if (link->editBufferSeq() != soundSeq)
@@ -131,8 +150,50 @@ void Trigon6Processor::requestGetSound()
     link->requestEditBuffer();
 }
 
+void Trigon6Processor::setSlot (int bank, int program)
+{
+    if (! origin.slotKnown || origin.bank != bank || origin.program != program)
+        origin.pcData.clear();
+    origin.slotKnown = true;
+    origin.bank = bank;
+    origin.program = program;
+}
+
+void Trigon6Processor::loadProgram (int bank, int program)
+{
+    link->sendProgramChange (midiChannel.load(), bank, program);
+    setSlot (bank, program);
+    autoGetSoundMs = juce::Time::getMillisecondCounterHiRes() + 300.0;
+}
+
+void Trigon6Processor::noteSavedToSynth (int bank, int program, const std::string& name)
+{
+    setSlot (bank, program);
+    origin.name = name;
+}
+
+void Trigon6Processor::noteSavedToPc (const std::vector<uint8_t>& data)
+{
+    origin.pcData = data;
+    origin.name = t6::programName (data);
+}
+
+std::vector<int> Trigon6Processor::currentValues() const
+{
+    const auto& table = t6::paramTable();
+    std::vector<int> v;
+    v.reserve (table.size());
+    for (size_t i = 0; i < table.size(); ++i)
+    {
+        const int x = (int) std::lround (raw[i]->load());
+        v.push_back (table[i].kind == t6::Kind::Choice ? table[i].min + x : x);
+    }
+    return v;
+}
+
 void Trigon6Processor::applySound (const std::vector<uint8_t>& data)
 {
+    origin.name = t6::programName (data);
     const auto& table = t6::paramTable();
     int set = 0;
     juce::StringArray outOfRange, skipped;

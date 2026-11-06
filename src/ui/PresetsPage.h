@@ -27,6 +27,11 @@ public:
     // The selected row when exactly one is selected: the default slot for Save.
     std::optional<std::pair<int, int>> selectedSlot() const;
 
+    // For the top bar's indicator: a slot's stored 1024 bytes from the cache (empty = not read),
+    // and whether it is being read from the synth now.
+    std::vector<uint8_t> storedData (int bank, int program);
+    bool isReading (int bank, int program) const { return queue.pending (bank, program); }
+
     // Rename: the editor opens the SavePanel for this slot.
     std::function<void (int bank, int program)> onRename;
 

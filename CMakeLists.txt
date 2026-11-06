@@ -30,6 +30,7 @@ add_library(t6_core STATIC
     src/core/Connection.cpp
     src/core/PortMatch.cpp
     src/core/Presets.cpp
+    src/core/SoundSync.cpp
     src/ui/PanelLayout.cpp)
 target_include_directories(t6_core PUBLIC src)
 set_target_properties(t6_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

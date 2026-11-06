@@ -26,6 +26,20 @@ FL Studio scans, then rescan plugins in FL.
 | MIDI Out | **USB** | when the synth is connected by USB |
 | MIDI SysEx | **USB** | for Get patch (stage 5) |
 
+## Is the sound saved? (top bar)
+
+Next to the sound status the top bar says how the current sound compares with what is stored:
+
+- **Saved in U 012** (green): the same as the slot it came from.
+- **● Edited - 3 changes** (orange): differs from that slot. Hover for the list (Cutoff 64 -> 91). A new name counts.
+- **● Saved on PC only** (blue): saved as a .syx on the PC, but the slot on the synth still holds the old version.
+- **Slot unknown / U 012 not read / Checking U 012...** (grey): nothing to compare with yet.
+
+The slot is the program picked last: on the synth's panel, with Load on the Presets tab, or the slot a sound was saved
+into. Picking a program reads it again from the synth (only a read), so a change saved with the synth's own WRITE
+button shows up; the plugin also reads the new sound (Get sound). A trailing **?** means the synth does not send its
+knob moves (Param Xmit is not NR), so edits made on the synth can't be seen until Get sound.
+
 ## Connection page
 
 The plugin opens on **Connection** unless the synth is fully connected (then it opens on **Panel**).

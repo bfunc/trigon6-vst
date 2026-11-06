@@ -1,6 +1,9 @@
 #include "PluginEditor.h"
 
+#include "core/Connection.h"
+#include "core/Globals.h"
 #include "core/ParamTable.h"
+#include "core/SoundSync.h"
 #include "ui/ConnectionPage.h"
 #include "ui/HardwareLook.h"
 #include "ui/PanelLayout.h"
@@ -451,6 +454,10 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     status.setFont (juce::FontOptions (12.0f));
     addAndMakeVisible (status);
 
+    sync.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+    sync.setMinimumHorizontalScale (0.7f);
+    addAndMakeVisible (sync);
+
     // Connection first; the editor opens on it unless the synth is fully connected.
     tabs = std::make_unique<Tabs>();
     tabs->setTabBarDepth (38);
@@ -524,6 +531,8 @@ void Trigon6Editor::resized()
     channel.setBounds (bar.removeFromRight (64));
     channelLabel.setBounds (bar.removeFromRight (70));
     bar.removeFromRight (12);
+    sync.setBounds (bar.removeFromLeft (220));
+    bar.removeFromLeft (10);
     soundStatus.setBounds (bar);
 
     tabs->setBounds (r);
@@ -571,4 +580,41 @@ void Trigon6Editor::timerCallback()
     const auto s = proc.getSoundStatus();
     soundStatus.setText (s, juce::dontSendNotification);
     soundStatus.setTooltip (s);
+    updateSync();
+}
+
+void Trigon6Editor::updateSync()
+{
+    const auto& o = proc.getOrigin();
+    t6::SyncInput in;
+    in.slotKnown = o.slotKnown;
+    in.bank = o.bank;
+    in.program = o.program;
+    if (o.slotKnown && presetsPage != nullptr)
+    {
+        in.slotData = presetsPage->storedData (o.bank, o.program);
+        in.checking = presetsPage->isReading (o.bank, o.program);
+    }
+    in.values = proc.currentValues();
+    in.name = o.name;
+    in.pcData = o.pcData;
+    // Knob moves on the synth reach the plugin only with Param Xmit = NR (raw 2); unknown counts as seen.
+    const auto xmit = t6::readGlobal (proc.getLink().snapshot (proc.getMidiChannel()), t6::kGlobalParamXmit);
+    in.seesSynthKnobs = ! xmit.known || xmit.raw == 2;
+
+    const auto r = t6::syncStatus (in);
+    juce::Colour c = juce::Colour (0xff8c8c90);
+    juce::String dot;
+    switch (r.state)
+    {
+        case t6::SyncState::InSync: c = juce::Colour (0xff7fcf6f); break;
+        case t6::SyncState::PcOnly: c = juce::Colour (0xff6fb5ff); dot = juce::String::charToString (0x25CF) + " "; break;
+        case t6::SyncState::Edited: c = hw::col::buttonOnTop; dot = juce::String::charToString (0x25CF) + " "; break;
+        case t6::SyncState::NoSlot:
+        case t6::SyncState::NotRead:
+        case t6::SyncState::Checking: break;
+    }
+    sync.setText (dot + juce::String (r.text), juce::dontSendNotification);
+    sync.setColour (juce::Label::textColourId, c);
+    sync.setTooltip (juce::String (r.tooltip).trimEnd());
 }

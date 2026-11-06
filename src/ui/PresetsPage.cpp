@@ -401,15 +401,23 @@ void PresetsPage::loadSelected()
     if (! slot)
         return;
     const int bank = slot->first, program = slot->second;
-    proc.getLink().sendProgramChange (proc.getMidiChannel(), bank, program);
+    // The processor reads the new sound into the panel once the synth has switched; the slot is read again
+    // too, so the list (and the top bar) catch a change saved with WRITE on the synth.
+    proc.loadProgram (bank, program);
+    queue.enqueue (bank, program, true);
     status.setText ("Loaded " + juce::String (t6::programLabel (bank, program)) + " " + juce::String (entry (bank, program).name) + " on the synth.",
                     juce::dontSendNotification);
-    // Then read the new sound into the panel, once the synth has switched.
-    juce::Timer::callAfterDelay (300, [safe = juce::Component::SafePointer<PresetsPage> (this)]
-    {
-        if (safe != nullptr)
-            safe->proc.requestGetSound();
-    });
+}
+
+std::vector<uint8_t> PresetsPage::storedData (int bank, int program)
+{
+    if (bank < 0 || bank >= t6::kBankCount || program < 0 || program >= t6::kProgramsPerBank)
+        return {};
+    const auto& e = entry (bank, program);
+    if (e.sysex.size() < 4)
+        return {};
+    const auto sp = t6::parseStoredProgram (e.sysex.data(), e.sysex.size(), e.sysex[2]);
+    return sp ? sp->data : std::vector<uint8_t> {};
 }
 
 void PresetsPage::rereadSelected()

@@ -287,4 +287,12 @@ bool FetchQueue::received (int bank, int program)
     return true;
 }
 
+bool FetchQueue::pending (int bank, int program) const
+{
+    const auto slot = std::make_pair (bank, program);
+    if (waiting && *waiting == slot)
+        return true;
+    return std::find (jobs.begin(), jobs.end(), slot) != jobs.end();
+}
+
 } // namespace t6
