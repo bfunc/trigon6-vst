@@ -57,6 +57,19 @@ ParamDef sawRamp (int nrpn, int nrpn2, const char* id, const char* name, S s)
     return p;
 }
 
+ParamDef inverted (ParamDef p)
+{
+    p.inverted = true;
+    return p;
+}
+
+// A knob whose positions have names (Unison Voices: 1-6, Chord).
+ParamDef labelled (ParamDef p, std::vector<std::string> names)
+{
+    p.choices = std::move (names);
+    return p;
+}
+
 const std::vector<std::string> octaves { "-2", "-1", "0", "+1", "+2" };
 const std::vector<std::string> fxA { "Off", "BBD", "DDL", "Chorus", "PH1", "PH2", "PH3", "Ring", "FL1", "FL2" };
 
@@ -102,7 +115,7 @@ std::vector<ParamDef> build()
         num  (29, "cutoff", "Cutoff", S::Filter, 0, 164),
         num  (30, "resonance", "Resonance", S::Filter, 0, 127),
         pick (31, "filter_keyboard", "Filter Keyboard", S::Filter, { "Off", "Half", "Full" }),
-        onOff (33, "filter_2pole", "2 Pole", S::Filter),
+        inverted (onOff (33, "filter_2pole", "2 Pole", S::Filter)),  // light was the wrong way round on the synth (2026-11-06)
 
         // Filter envelope
         bip  (36, "fenv_amount", "FEnv Amount", S::FilterEnv, 254, 127),
@@ -187,7 +200,7 @@ std::vector<ParamDef> build()
         num  (23, "glide_rate", "Glide Rate", S::Misc, 0, 127),
         pick (24, "glide_mode", "Glide Mode", S::Misc, { "FR", "FRA", "FT", "FTA" }),
         onOff (95, "unison_on", "Unison On", S::Misc),
-        num  (96, "unison_voices", "Unison Voices", S::Misc, 0, 6),
+        labelled (num (96, "unison_voices", "Unison Voices", S::Misc, 0, 6), { "1", "2", "3", "4", "5", "6", "Chord" }),  // as the synth shows it
         pick (97, "key_mode", "Key Mode", S::Misc, { "Low", "High", "Last", "Low R", "High R", "Last R" }), // 0-5 as the synth shows them: Lo Hi LAS LoR HiR LAr
         num  (26, "pitch_wheel_range", "Pitch Wheel Range", S::Misc, 0, 12),
     };
@@ -221,7 +234,7 @@ int indexOfNrpn (int nrpn)
 std::vector<NrpnValue> nrpnValues (const ParamDef& p, int value)
 {
     if (p.nrpn2 < 0)
-        return { { p.nrpn, value } };
+        return { { p.nrpn, p.inverted ? 1 - value : value } };
     // Off: 7 = 0, 107 = 0; Saw: 7 = 1, 107 = 0; Ramp: 7 = 1, 107 = 1
     return { { p.nrpn, value > 0 ? 1 : 0 }, { p.nrpn2, value > 1 ? 1 : 0 } };
 }
@@ -229,14 +242,14 @@ std::vector<NrpnValue> nrpnValues (const ParamDef& p, int value)
 int valueFromBytes (const ParamDef& p, int atNrpn, int atNrpn2)
 {
     if (p.nrpn2 < 0)
-        return atNrpn;
+        return p.inverted ? (atNrpn == 0 ? 1 : 0) : atNrpn;
     return atNrpn == 0 ? 0 : (atNrpn2 == 0 ? 1 : 2);
 }
 
 int valueAfterNrpn (const ParamDef& p, int current, int nrpn, int nrpnValue)
 {
     if (p.nrpn2 < 0)
-        return nrpnValue;
+        return valueFromBytes (p, nrpnValue, 0);
     auto now = nrpnValues (p, current);
     int on = now[0].value, rising = now[1].value;
     if (nrpn == p.nrpn)
@@ -264,6 +277,8 @@ std::string formatValue (const ParamDef& p, int value)
             return (d > 0 ? "+" : "") + std::to_string (d);
         }
         case Kind::Int:
+            if (const int i = value - p.min; i >= 0 && i < (int) p.choices.size())
+                return p.choices[(size_t) i];
             break;
     }
     return std::to_string (value);

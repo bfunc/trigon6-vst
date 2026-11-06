@@ -214,6 +214,14 @@ static void testTable()
     }
     CHECK (indexOfNrpn (37) == -1);  // a gap in the numbering
 
+    // 2 Pole: the light is on when the synth's NRPN 33 is 0
+    const auto& pole = t[(size_t) indexOfNrpn (33)];
+    CHECK (pole.inverted && nrpnValues (pole, 1)[0].value == 0 && nrpnValues (pole, 0)[0].value == 1);
+    CHECK (valueFromBytes (pole, 0, 0) == 1 && valueAfterNrpn (pole, 0, 33, 1) == 0);
+    // Unison Voices: 0-6 shows as 1-6, Chord
+    const auto& uni = t[(size_t) indexOfNrpn (96)];
+    CHECK (formatValue (uni, 0) == "1" && formatValue (uni, 5) == "6" && formatValue (uni, 6) == "Chord");
+
     // Osc 3 saw: one control on NRPN 7 (on) and 107 (rising), as the synth's button steps it
     const auto& saw = t[(size_t) indexOfNrpn (7)];
     CHECK (indexOfNrpn (107) == indexOfNrpn (7) && saw.nrpn2 == 107 && saw.kind == Kind::Choice);

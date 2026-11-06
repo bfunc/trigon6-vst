@@ -47,6 +47,8 @@ struct ParamDef
     // A second NRPN for one control (Osc 3 saw: Off / Saw / Ramp). The synth sends `nrpn` = 1 for "on"
     // and nrpn2 = 1 for "rising"; -1 = a plain one-NRPN parameter.
     int nrpn2 = -1;
+    // Bool only: the synth's value is the opposite of the button's light (2 Pole: NRPN 33 = 0 is 2-pole).
+    bool inverted = false;
 };
 
 struct NrpnValue
