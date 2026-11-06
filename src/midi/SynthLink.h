@@ -7,6 +7,10 @@
 //
 // Threads: the port timer runs on the message thread, MIDI input arrives on the MIDI thread, and NRPN are
 // sent from the processor's pump thread or the audio thread. The audio thread only ever try-locks.
+//
+// Closing a port happens on a thread of its own: when the synth is switched off with its USB port open, the
+// Windows driver can hang in the close call. That thread may then hang, but the editor and the app's exit don't
+// wait for it (the standalone app ends itself after 2 s instead of staying in the background).
 #pragma once
 
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -24,6 +28,7 @@
 
 class SynthLink : private juce::MidiInputCallback, private juce::Timer
 {
+    class InputForwarder;
 public:
     static std::shared_ptr<SynthLink> acquire();  // message thread
     ~SynthLink() override;
@@ -111,6 +116,9 @@ private:
     juce::String outputId;
     std::unique_ptr<juce::MidiInput> input;
     juce::String inputId;
+    // Input callbacks go through this, so a port closing late (or never) can't call into a deleted SynthLink.
+    std::shared_ptr<InputForwarder> forwarder;
+    void closeLater (std::unique_ptr<juce::MidiInput>, std::unique_ptr<juce::MidiOutput>);
 
     std::atomic<bool> hostOutput { false };
     std::atomic<bool> outputOpen { false };

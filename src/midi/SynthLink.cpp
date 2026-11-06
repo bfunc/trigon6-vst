@@ -4,7 +4,10 @@
 #include "core/PortMatch.h"
 #include "core/Sysex.h"
 
+#include <chrono>
+#include <cstdlib>
 #include <mutex>
+#include <thread>
 
 namespace
 {
@@ -13,6 +16,16 @@ constexpr int kPortCheckTicks = 30;  // look for the ports every 1.5 s
 constexpr int kProbeStepTicks = 5;   // the three Check requests go out 250 ms apart
 constexpr double kEchoWindowMs = 300;
 constexpr int kTestNote = 60;
+
+std::atomic<int> portsClosing { 0 };  // closes still running on their own threads
+
+bool waitForCloses (int ms)
+{
+    const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds (ms);
+    while (portsClosing.load() > 0 && std::chrono::steady_clock::now() < until)
+        std::this_thread::sleep_for (std::chrono::milliseconds (10));
+    return portsClosing.load() == 0;
+}
 
 std::mutex instanceMutex;
 std::weak_ptr<SynthLink> instance;
@@ -46,6 +59,43 @@ juce::StringArray names (const juce::Array<juce::MidiDeviceInfo>& devices)
 }
 } // namespace
 
+class SynthLink::InputForwarder : public juce::MidiInputCallback
+{
+public:
+    explicit InputForwarder (SynthLink& l) : link (&l) {}
+    void handleIncomingMidiMessage (juce::MidiInput* source, const juce::MidiMessage& m) override
+    {
+        const juce::ScopedLock sl (lock);
+        if (link != nullptr)
+            link->handleIncomingMidiMessage (source, m);
+    }
+    void detach()
+    {
+        const juce::ScopedLock sl (lock);
+        link = nullptr;
+    }
+
+private:
+    juce::CriticalSection lock;
+    SynthLink* link;
+};
+
+void SynthLink::closeLater (std::unique_ptr<juce::MidiInput> in, std::unique_ptr<juce::MidiOutput> out)
+{
+    if (in == nullptr && out == nullptr)
+        return;
+    ++portsClosing;
+    std::thread ([in = std::move (in), out = std::move (out), keep = forwarder]() mutable
+    {
+        if (in != nullptr)
+            in->stop();
+        in.reset();
+        out.reset();
+        keep.reset();
+        --portsClosing;
+    }).detach();
+}
+
 std::shared_ptr<SynthLink> SynthLink::acquire()
 {
     const std::lock_guard<std::mutex> lock (instanceMutex);
@@ -58,16 +108,21 @@ std::shared_ptr<SynthLink> SynthLink::acquire()
     return link;
 }
 
-SynthLink::SynthLink() { startTimer (kTickMs); }
+SynthLink::SynthLink() : forwarder (std::make_shared<InputForwarder> (*this)) { startTimer (kTickMs); }
 
 SynthLink::~SynthLink()
 {
     stopTimer();
-    if (input)
-        input->stop();
-    input.reset();
-    const juce::ScopedLock sl (outLock);
-    output.reset();
+    forwarder->detach();
+    std::unique_ptr<juce::MidiOutput> out;
+    {
+        const juce::ScopedLock sl (outLock);
+        out = std::move (output);
+    }
+    closeLater (std::move (input), std::move (out));
+    // A port whose driver hung (the synth was switched off while open) would keep the app alive with no window.
+    if (! waitForCloses (2000) && juce::JUCEApplicationBase::isStandaloneApp())
+        std::_Exit (0);
 }
 
 juce::StringArray SynthLink::inputNames() { return names (juce::MidiInput::getAvailableDevices()); }
@@ -118,13 +173,12 @@ void SynthLink::updatePorts()
     // Close a port that is gone or no longer wanted, then (re)open. A busy port is retried each time.
     if (input != nullptr && inDev.identifier != inputId)
     {
-        input->stop();
-        input.reset();
+        closeLater (std::move (input), nullptr);  // gone (the synth switched off): its close may hang
         inputId = {};
     }
     if (input == nullptr && inDev.identifier.isNotEmpty())
     {
-        input = juce::MidiInput::openDevice (inDev.identifier, this);
+        input = juce::MidiInput::openDevice (inDev.identifier, forwarder.get());
         if (input != nullptr)
         {
             input->start();
@@ -139,7 +193,7 @@ void SynthLink::updatePorts()
         const juce::ScopedLock sl (outLock);
         if (output != nullptr && outDev.identifier != outputId)
         {
-            output.reset();
+            closeLater (nullptr, std::move (output));
             outputId = {};
         }
         if (output == nullptr && outDev.identifier.isNotEmpty())
