@@ -43,7 +43,7 @@ private:
     juce::TextButton useChannel;
     juce::StringArray inNames, outNames;
 
-    juce::Rectangle<int> checklistArea, globalsArea;
+    juce::Rectangle<int> checklistArea, globalsArea, statusArea;
     std::array<juce::Rectangle<float>, 10> globalCells;  // where paintGlobals drew the buttons
     int globalAtMouse (juce::Point<float>) const;
     int hoverButton = -1, clickedButton = -1;  // the info box explains the hovered button, else the clicked one

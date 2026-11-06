@@ -178,6 +178,7 @@ void ConnectionPage::timerCallback()
     updateButtons();
     repaint (checklistArea);
     repaint (globalsArea);
+    repaint (statusArea);
 }
 
 void ConnectionPage::updateButtons()
@@ -216,6 +217,8 @@ void ConnectionPage::resized()
     useChannel.setBounds (tests.removeFromLeft (140));
 
     r.removeFromTop (12);
+    statusArea = r.removeFromBottom (20);
+    r.removeFromBottom (6);
     auto monitorArea = r.removeFromBottom (150);
     r.removeFromBottom (8);
     auto monitorBar = monitorArea.removeFromTop (24);
@@ -232,6 +235,21 @@ void ConnectionPage::paint (juce::Graphics& g)
     g.fillAll (theme::background);
     paintChecklist (g, checklistArea);
     paintGlobals (g, globalsArea);
+
+    // Status line: the raw global dump, to check the dump's order against the synth
+    juce::String status;
+    if (snap.globalsMs >= 0)
+    {
+        status << "Global dump: ";
+        for (size_t i = 0; i < snap.globalsDump.size(); ++i)
+            status << snap.globalsDump[i] << (i + 1 < snap.globalsDump.size() ? " " : "");
+        status << "   |   ? = value from the dump only (order not checked yet)   |   white frame = button to press now";
+    }
+    else
+        status = "No global dump yet: press Check (needs MIDI SysEx = USB). Values also appear when you change a setting on the synth.";
+    g.setColour (theme::dim);
+    g.setFont (juce::FontOptions (12.5f));
+    g.drawFittedText (status, statusArea, juce::Justification::centredLeft, 1, 0.9f);
 }
 
 void ConnectionPage::paintChecklist (juce::Graphics& g, juce::Rectangle<int> area)
@@ -330,22 +348,6 @@ void ConnectionPage::paintGlobals (juce::Graphics& g, juce::Rectangle<int> area)
         tl.draw (g, r.removeFromTop ((int) std::ceil (tl.getHeight())).toFloat());
     }
     r.removeFromTop (10);
-
-    // Footer: where the values come from, and the raw dump (to check the dump's order on the synth)
-    juce::String footer;
-    if (snap.globalsMs >= 0)
-    {
-        footer << "Global dump received. Raw values: ";
-        for (size_t i = 0; i < snap.globalsDump.size(); ++i)
-            footer << snap.globalsDump[i] << (i + 1 < snap.globalsDump.size() ? " " : "");
-        footer << ".  Values marked ? come only from the dump, whose order is not checked yet. A white frame marks the button to press now.";
-    }
-    else
-        footer = "No global dump yet (press Check; needs MIDI SysEx = USB). Values also appear when you change a setting on the synth.";
-    auto footerTl = layoutText ("", footer, (float) r.getWidth());
-    auto footerArea = r.removeFromBottom ((int) std::ceil (footerTl.getHeight()));
-    footerTl.draw (g, footerArea.toFloat());
-    r.removeFromBottom (8);
 
     // The settings with GLOBALS pressed once; the info box below explains the hovered or clicked button.
     const int rowH = juce::jmin (r.getHeight(), 140);
