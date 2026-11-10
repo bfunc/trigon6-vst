@@ -3,6 +3,7 @@
 #include "core/Connection.h"
 #include "core/Globals.h"
 #include "core/ParamTable.h"
+#include "core/PresetDiff.h"
 #include "core/SoundSync.h"
 #include "ui/ConnectionPage.h"
 #include "ui/HardwareLook.h"
@@ -12,6 +13,7 @@
 #include "ui/Theme.h"
 
 #include <cstring>
+#include <functional>
 #include <set>
 #include <tuple>
 
@@ -185,12 +187,148 @@ private:
     int value = 0;
 };
 
+// A knob that shows how far it is from the preset: a small mark on the ring at the preset's value (always visible when
+// the value differs) and an arc from the mark to the pointer. A click on the mark, or a double click on the knob, puts
+// the preset's value back (and so sends it to the synth). Without a preset it behaves as before.
+class DiffKnob : public juce::Slider
+{
+public:
+    DiffKnob (Trigon6Processor& p, size_t idx)
+        : juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow), proc (p), index (idx)
+    {
+    }
+
+    bool differs() const
+    {
+        return proc.hasPreset() && index < proc.getPresetValues().size() && proc.getPresetValues()[index] != proc.currentValue (index);
+    }
+
+    juce::String getTooltip() override
+    {
+        auto text = juce::Slider::getTooltip();
+        if (! differs())
+            return text;
+        const auto& def = t6::paramTable()[index];
+        return text + "\n" + juce::String::fromUTF8 (t6::diffText (def, proc.getPresetValues()[index], proc.currentValue (index)).c_str())
+               + "\nClick the mark or double-click: back to the preset";
+    }
+
+    void paintOverChildren (juce::Graphics& g) override
+    {
+        if (! differs())
+            return;
+        const auto geo = geometry();
+        if (! geo.ok)
+            return;
+        const float a0 = geo.angleOf (proc.getPresetValues()[index]), a1 = geo.angleOf (proc.currentValue (index));
+        const auto orange = hw::col::buttonOnTop;
+        juce::Path arc;
+        arc.addCentredArc (geo.c.x, geo.c.y, geo.ringR, geo.ringR, 0.0f, juce::jmin (a0, a1), juce::jmax (a0, a1), true);
+        g.setColour (orange);
+        g.strokePath (arc, juce::PathStrokeType (2.4f, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+        // the mark: never smaller than this, so a difference of one step still shows
+        const auto m = geo.c.getPointOnCircumference (geo.ringR, a0);
+        g.setColour (juce::Colours::black.withAlpha (0.8f));
+        g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (m));
+        g.setColour (orange);
+        g.fillEllipse (juce::Rectangle<float> (5.0f, 5.0f).withCentre (m));
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        swallowed = false;
+        if (differs())
+        {
+            const auto geo = geometry();
+            if (geo.ok && geo.c.getPointOnCircumference (geo.ringR, geo.angleOf (proc.getPresetValues()[index])).getDistanceFrom (e.position) <= 7.0f)
+            {
+                swallowed = true;
+                proc.resetToPreset (index);
+                return;
+            }
+        }
+        juce::Slider::mouseDown (e);
+    }
+    void mouseDrag (const juce::MouseEvent& e) override
+    {
+        if (! swallowed)
+            juce::Slider::mouseDrag (e);
+    }
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (! swallowed)
+            juce::Slider::mouseUp (e);
+        swallowed = false;
+    }
+    void mouseDoubleClick (const juce::MouseEvent& e) override
+    {
+        if (proc.hasPreset() && index < proc.getPresetValues().size())
+            proc.resetToPreset (index);
+        else
+            juce::Slider::mouseDoubleClick (e);
+    }
+
+private:
+    struct Geo
+    {
+        bool ok = false;
+        juce::Point<float> c;
+        float ringR = 0.0f;
+        std::function<float (double)> angleOf;
+    };
+    // The same circle HardwareLook draws the knob on; the mark sits on its ring of ticks.
+    Geo geometry()
+    {
+        Geo geo;
+        const auto area = getLookAndFeel().getSliderLayout (*this).sliderBounds.toFloat();
+        const float d = juce::jmin (area.getWidth(), area.getHeight()) - 12.0f;
+        if (d < 10.0f)
+            return geo;
+        const auto rp = getRotaryParameters();
+        geo.c = area.getCentre();
+        geo.ringR = d / 2.0f + 3.8f;
+        geo.angleOf = [this, rp] (double v)
+        {
+            return rp.startAngleRadians + (float) valueToProportionOfLength (v) * (rp.endAngleRadians - rp.startAngleRadians);
+        };
+        geo.ok = true;
+        return geo;
+    }
+
+    Trigon6Processor& proc;
+    size_t index;
+    bool swallowed = false;
+};
+
+// A small orange dot at the corner of a button, switch or window whose value differs from the preset; a click puts the
+// preset's value back.
+class DiffDot : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    std::function<void()> onClick;
+    DiffDot() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+    void paint (juce::Graphics& g) override
+    {
+        const auto c = getLocalBounds().toFloat().getCentre();
+        g.setColour (juce::Colours::black.withAlpha (0.8f));
+        g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (c));
+        g.setColour (hw::col::buttonOnTop);
+        g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c));
+    }
+    void mouseDown (const juce::MouseEvent&) override
+    {
+        if (onClick)
+            onClick();
+    }
+};
+
 // One control on the panel: a knob, a glowing toggle, LEDs or a red window, with its name underneath.
 class Cell : public juce::Component, public juce::SettableTooltipClient
 {
 public:
-    Cell (APVTS& state, const std::string& cellId)
+    Cell (Trigon6Processor& processor, const std::string& cellId) : proc (processor)
     {
+        auto& state = proc.apvts;
         label.setJustificationType (juce::Justification::centred);
         label.setColour (juce::Label::textColourId, hw::col::label);
         label.setFont (hw::labelFont (10.5f));
@@ -212,6 +350,7 @@ public:
         jassert (p != nullptr);  // PanelLayout names an id that ParamTable does not have
         if (p == nullptr)
             return;
+        paramIndex = (int) (p - t6::paramTable().data());
         auto* param = state.getParameter (p->id);
         label.setText (shortName (*p).toUpperCase(), juce::dontSendNotification);
 
@@ -248,7 +387,7 @@ public:
 
             case t6::Kind::Int:
             case t6::Kind::Bipolar:
-                knob = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow);
+                knob = std::make_unique<DiffKnob> (proc, (size_t) paramIndex);
                 knob->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 14);
                 knob->setMouseDragSensitivity (300);
                 addAndMakeVisible (*knob);
@@ -261,6 +400,37 @@ public:
         for (auto* c : getChildren())
             if (auto* t = dynamic_cast<juce::SettableTooltipClient*> (c); t != nullptr && c != &label)
                 t->setTooltip (getTooltip());
+
+        // buttons, switches and windows: a dot when the value differs from the preset (a knob draws its own mark)
+        if (! knob)
+        {
+            dot.onClick = [this] { proc.resetToPreset ((size_t) paramIndex); };
+            dot.setVisible (false);
+            addChildComponent (dot);
+        }
+    }
+
+    // Called a few times a second: shows or hides the dot, repaints the knob's mark when the picture changed.
+    void updateDiff()
+    {
+        if (paramIndex < 0)
+            return;
+        const auto idx = (size_t) paramIndex;
+        const bool has = proc.hasPreset() && idx < proc.getPresetValues().size();
+        const int preset = has ? proc.getPresetValues()[idx] : 0, now = proc.currentValue (idx);
+        const bool differs = has && preset != now;
+        const auto key = std::make_tuple (differs, preset, now);
+        if (key == lastDiff)
+            return;
+        lastDiff = key;
+        if (knob)
+        {
+            knob->repaint();
+            return;
+        }
+        dot.setVisible (differs);
+        if (differs)
+            dot.setTooltip (juce::String::fromUTF8 (t6::diffText (t6::paramTable()[idx], preset, now).c_str()) + "\nClick: back to the preset");
     }
 
     void resized() override
@@ -285,11 +455,23 @@ public:
             leds->setBounds (r);
         else if (combo)
             combo->setBounds (r.withSizeKeepingCentre (juce::jmin (r.getWidth() - 4, 112), juce::jmin (26, r.getHeight())));
+
+        juce::Rectangle<int> ctrl;
+        if (button) ctrl = button->getBounds();
+        else if (combo) ctrl = combo->getBounds();
+        else if (sawRamp) ctrl = sawRamp->getBounds();
+        else if (leds) ctrl = leds->getBounds();
+        if (! ctrl.isEmpty())
+            dot.setBounds (juce::Rectangle<int> (12, 12).withPosition (juce::jmin (ctrl.getRight() - 10, getWidth() - 12), juce::jmax (0, ctrl.getY() - 2)));
     }
 
 private:
+    Trigon6Processor& proc;
+    int paramIndex = -1;
+    DiffDot dot;
+    std::tuple<bool, int, int> lastDiff { false, 0, 0 };
     juce::Label label;
-    std::unique_ptr<juce::Slider> knob;
+    std::unique_ptr<DiffKnob> knob;
     std::unique_ptr<juce::TextButton> button;
     std::unique_ptr<juce::ComboBox> combo;
     std::unique_ptr<SawRampButton> sawRamp;
@@ -305,7 +487,7 @@ private:
 class SectionPanel : public juce::Component
 {
 public:
-    SectionPanel (APVTS& state, const t6ui::SectionLayout& l) : layout (l)
+    SectionPanel (Trigon6Processor& proc, const t6ui::SectionLayout& l) : layout (l)
     {
         for (const auto& row : layout.rows)
         {
@@ -313,13 +495,20 @@ public:
             auto& cells = rows.emplace_back();
             for (const auto& id : row)
             {
-                cells.push_back (std::make_unique<Cell> (state, id));
+                cells.push_back (std::make_unique<Cell> (proc, id));
                 addAndMakeVisible (*cells.back());
             }
         }
     }
 
     const t6ui::SectionLayout& layout;
+
+    void updateDiff()
+    {
+        for (auto& cells : rows)
+            for (auto& c : cells)
+                c->updateDiff();
+    }
 
     bool isStrip() const { return layout.y >= 0.8f; }  // the bottom performance strip
 
@@ -365,16 +554,23 @@ private:
 };
 
 // The synth's front panel: section areas placed by the fractions in PanelLayout, between wooden end cheeks.
-class PanelPage : public juce::Component
+class PanelPage : public juce::Component, private juce::Timer
 {
 public:
-    explicit PanelPage (APVTS& state)
+    explicit PanelPage (Trigon6Processor& proc)
     {
         for (const auto& l : t6ui::panelLayout())
         {
-            sections.push_back (std::make_unique<SectionPanel> (state, l));
+            sections.push_back (std::make_unique<SectionPanel> (proc, l));
             addAndMakeVisible (*sections.back());
         }
+        startTimerHz (10);
+    }
+
+    void timerCallback() override
+    {
+        for (auto& s : sections)
+            s->updateDiff();
     }
 
     void paint (juce::Graphics& g) override
@@ -443,6 +639,10 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     getSound.setTooltip ("Read the synth's current sound into the plugin (sends nothing that changes the sound)");
     getSound.onClick = [this] { proc.requestGetSound(); };
     addAndMakeVisible (getSound);
+    resetAll.setTooltip ("Put every parameter back to the preset (the sound read from the synth or last saved) and send it to the synth");
+    resetAll.onClick = [this] { proc.resetAllToPreset(); };
+    resetAll.setEnabled (false);
+    addAndMakeVisible (resetAll);
     save.setTooltip ("Save the current sound into a user slot on the synth, a .syx file on the PC, or both");
     save.onClick = [this] { openSave(); };
     addAndMakeVisible (save);
@@ -465,7 +665,7 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     tabs->setIndent (10);
     auto* connection = new ConnectionPage (proc);
     tabs->addTab ("Connection", colours::background, connection, true);
-    tabs->addTab ("Panel", hw::col::panel, new PanelPage (proc.apvts), true);
+    tabs->addTab ("Panel", hw::col::panel, new PanelPage (proc), true);
     presetsPage = new PresetsPage (proc);
     presetsPage->onRename = [this] (int bank, int program) { openPanel (bank, program, true); };
     tabs->addTab ("Presets", colours::background, presetsPage, true);
@@ -520,9 +720,11 @@ void Trigon6Editor::resized()
     auto r = getLocalBounds().reduced (kWood, 0);
     auto bar = r.removeFromTop (kTopBar).reduced (18, 11);
     bar.removeFromLeft (330);  // the painted title
-    status.setBounds (bar.removeFromRight (200));
+    status.setBounds (bar.removeFromRight (150));
     bar.removeFromRight (12);
     sendAll.setBounds (bar.removeFromRight (104));
+    bar.removeFromRight (8);
+    resetAll.setBounds (bar.removeFromRight (122));
     bar.removeFromRight (8);
     save.setBounds (bar.removeFromRight (80));
     bar.removeFromRight (8);
@@ -580,6 +782,7 @@ void Trigon6Editor::timerCallback()
     const auto s = proc.getSoundStatus();
     soundStatus.setText (s, juce::dontSendNotification);
     soundStatus.setTooltip (s);
+    resetAll.setEnabled (proc.hasPreset() && proc.presetDiffCount() > 0);
     updateSync();
 }
 

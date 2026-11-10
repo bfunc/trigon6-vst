@@ -33,6 +33,7 @@ private:
     juce::TextButton sendAll { "Send all" };
     juce::TextButton getSound { "Get sound" };
     juce::TextButton save { "Save" };
+    juce::TextButton resetAll { "Reset to preset" };
     void openSave();
     void openPanel (int bank, int program, bool rename);
     std::unique_ptr<SavePanel> savePanel;

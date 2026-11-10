@@ -3,6 +3,7 @@
 #include "PluginEditor.h"
 #include "core/Nrpn.h"
 #include "core/ParamTable.h"
+#include "core/PresetDiff.h"
 #include "core/Presets.h"
 
 namespace
@@ -11,11 +12,6 @@ const juce::Identifier kChannel { "midiChannel" };
 const juce::Identifier kOutputMode { "outputMode" };  // "host" or "direct"
 const juce::Identifier kInPort { "inputPort" };       // "" = automatic
 const juce::Identifier kOutPort { "outputPort" };
-
-bool isStandalone()
-{
-    return juce::PluginHostType::getPluginLoadedAs() == juce::AudioProcessor::wrapperType_Standalone;
-}
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout Trigon6Processor::createLayout()
@@ -61,8 +57,9 @@ Trigon6Processor::Trigon6Processor()
         raw.push_back (apvts.getRawParameterValue (p.id));
     apvts.state.setProperty (kChannel, 1, nullptr);
 
-    // The standalone app talks to the synth's port itself; in a DAW the host routes the plugin's MIDI out.
-    setHostOutput (! isStandalone());
+    // A new plugin (or the standalone app) talks to the synth's port itself; a saved state brings its own choice
+    // back (setStateInformation).
+    setHostOutput (false);
     incomingSeen = link->incomingSeq();
     pcSeen = link->lastProgramChange().seq;
     pump.startThread();
@@ -170,12 +167,14 @@ void Trigon6Processor::noteSavedToSynth (int bank, int program, const std::strin
 {
     setSlot (bank, program);
     origin.name = name;
+    takePresetFromCurrent();
 }
 
 void Trigon6Processor::noteSavedToPc (const std::vector<uint8_t>& data)
 {
     origin.pcData = data;
     origin.name = t6::programName (data);
+    takePresetFromCurrent();
 }
 
 std::vector<int> Trigon6Processor::currentValues() const
@@ -189,6 +188,41 @@ std::vector<int> Trigon6Processor::currentValues() const
         v.push_back (table[i].kind == t6::Kind::Choice ? table[i].min + x : x);
     }
     return v;
+}
+
+int Trigon6Processor::currentValue (size_t i) const
+{
+    const auto& p = t6::paramTable()[i];
+    const int x = (int) std::lround (raw[i]->load());
+    return p.kind == t6::Kind::Choice ? p.min + x : x;
+}
+
+void Trigon6Processor::takePresetFromCurrent() { presetValues = currentValues(); }
+
+int Trigon6Processor::presetDiffCount() const { return (int) t6::differingParams (presetValues, currentValues()).size(); }
+
+void Trigon6Processor::setParamTo (size_t i, int value)
+{
+    const auto& p = t6::paramTable()[i];
+    if (auto* param = apvts.getParameter (p.id))
+    {
+        const float plain = (float) (p.kind == t6::Kind::Choice ? value - p.min : value);
+        param->beginChangeGesture();
+        param->setValueNotifyingHost (param->convertTo0to1 (plain));
+        param->endChangeGesture();
+    }
+}
+
+void Trigon6Processor::resetToPreset (size_t i)
+{
+    if (hasPreset() && i < presetValues.size())
+        setParamTo (i, presetValues[i]);
+}
+
+void Trigon6Processor::resetAllToPreset()
+{
+    for (const auto i : t6::differingParams (presetValues, currentValues()))
+        setParamTo (i, presetValues[i]);
 }
 
 void Trigon6Processor::applySound (const std::vector<uint8_t>& data)
@@ -215,6 +249,7 @@ void Trigon6Processor::applySound (const std::vector<uint8_t>& data)
         applyFromSynth (i, v);
         ++set;
     }
+    takePresetFromCurrent();
     soundStatus = "Got sound: " + juce::String (set) + " set";
     if (! outOfRange.isEmpty())
         soundStatus << "; " << outOfRange.size() << " impossible (" << outOfRange.joinIntoString (", ") << ")";

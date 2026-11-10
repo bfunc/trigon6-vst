@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Trigon6Control VERSION 0.1.0 LANGUAGES C CXX)
-set(T6_VERSION_LABEL "0.1.0")  # the next release; raise it right after each release
+project(Trigon6Control VERSION 0.1.1 LANGUAGES C CXX)
+set(T6_VERSION_LABEL "0.1.1")  # the next release; raise it right after each release
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +29,7 @@ add_library(t6_core STATIC
     src/core/Globals.cpp
     src/core/Connection.cpp
     src/core/PortMatch.cpp
+    src/core/PresetDiff.cpp
     src/core/Presets.cpp
     src/core/SoundSync.cpp
     src/ui/PanelLayout.cpp)
@@ -90,3 +91,14 @@ enable_testing()
 add_executable(t6_tests tests/CoreTests.cpp)
 target_link_libraries(t6_tests PRIVATE t6_core)
 add_test(NAME core COMMAND t6_tests)
+
+# A local check of the processor (not in CI): cmake -DT6_PLAYTEST=ON
+option(T6_PLAYTEST "Build the offline processor test" OFF)
+if(T6_PLAYTEST)
+    juce_add_console_app(t6_proctest PRODUCT_NAME "t6_proctest")
+    target_sources(t6_proctest PRIVATE tests/ProcessorTest.cpp)
+    target_include_directories(t6_proctest PRIVATE src)
+    target_compile_definitions(t6_proctest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_Name="Trigon6 Control"
+        T6_VERSION_LABEL="${T6_VERSION_LABEL}")
+    target_link_libraries(t6_proctest PRIVATE Trigon6Control juce::juce_audio_utils juce::juce_audio_devices)
+endif()

@@ -5,6 +5,7 @@
 #include "core/Nrpn.h"
 #include "core/Packed.h"
 #include "core/PortMatch.h"
+#include "core/PresetDiff.h"
 #include "core/Presets.h"
 #include "core/ParamTable.h"
 #include "core/SendQueue.h"
@@ -730,6 +731,57 @@ static void testPresets()
     CHECK (! q.busy() && q.poll (0).kind == FetchQueue::Step::None);
 }
 
+// The preset marks: which parameters differ, and the tooltip text
+static void testPresetDiff()
+{
+    const auto& table = paramTable();
+    std::vector<int> preset, now;
+    for (const auto& p : table)
+        preset.push_back (p.kind == Kind::Choice ? p.min : p.min);
+    now = preset;
+    CHECK (differingParams ({}, now).empty());   // no preset: nothing differs
+    CHECK (differingParams (preset, now).empty());
+    const int cutoff = indexOfNrpn (29), reson = indexOfNrpn (30);
+    CHECK (cutoff >= 0 && reson >= 0);
+    now[(size_t) cutoff] = 100;
+    now[(size_t) reson] = 3;
+    const auto d = differingParams (preset, now);
+    CHECK (d.size() == 2 && d[0] == (size_t) std::min (cutoff, reson) && d[1] == (size_t) std::max (cutoff, reson));
+    now[(size_t) cutoff] = preset[(size_t) cutoff];
+    CHECK (differingParams (preset, now).size() == 1);
+    // sizes that do not match: only the common part is compared
+    CHECK (differingParams (preset, std::vector<int> (3, 99)).size() <= 3);
+
+    const auto& c = table[(size_t) cutoff];
+    const std::string t = diffText (c, 80, 100);
+    CHECK (t == "preset 80, now 100, \xCE\x94 +20");
+    CHECK (diffText (c, 100, 80) == "preset 100, now 80, \xCE\x94 -20");
+    CHECK (diffText (c, 99, 100) == "preset 99, now 100, \xCE\x94 +1");
+    // a button or a choice: no delta
+    for (const auto& p : table)
+        if (p.kind == Kind::Bool)
+        {
+            const auto b = diffText (p, 0, 1);
+            CHECK (b.find ("\xCE\x94") == std::string::npos);
+            CHECK (b.find ("preset") == 0);
+            break;
+        }
+    for (const auto& p : table)
+        if (p.kind == Kind::Choice)
+        {
+            CHECK (diffText (p, p.min, p.min + 1).find ("\xCE\x94") == std::string::npos);
+            break;
+        }
+    // a bipolar knob shows its own scale, the delta is in steps
+    for (const auto& p : table)
+        if (p.kind == Kind::Bipolar)
+        {
+            const auto b = diffText (p, p.center, p.center + 5);
+            CHECK (b.find ("\xCE\x94 +5") != std::string::npos);
+            break;
+        }
+}
+
 int main()
 {
     testPresets();
@@ -745,6 +797,7 @@ int main()
     testSysex();
     testSendQueue();
     testTable();
+    testPresetDiff();
     if (failures)
     {
         std::printf ("%d check(s) failed\n", failures);

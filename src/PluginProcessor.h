@@ -66,6 +66,17 @@ public:
     void noteSavedToSynth (int bank, int program, const std::string& name);
     void noteSavedToPc (const std::vector<uint8_t>& data);  // 1024 bytes, name included
     std::vector<int> currentValues() const;                 // NRPN values, one per paramTable() entry
+    int currentValue (size_t index) const;
+
+    // The preset the panel compares the sound with: the sound read from the synth (Get sound, also after a program
+    // is picked) or the one last saved. Empty = no preset yet. Message thread.
+    bool hasPreset() const { return ! presetValues.empty(); }
+    const std::vector<int>& getPresetValues() const { return presetValues; }
+    int presetDiffCount() const;
+    // Set one parameter as a hand move would: the host sees it and the synth gets it.
+    void setParamTo (size_t index, int value);
+    void resetToPreset (size_t index);
+    void resetAllToPreset();
 
     SynthLink& getLink() { return *link; }
     bool isHostOutput() const { return link->isHostOutput(); }
@@ -111,6 +122,8 @@ private:
     double soundAskedMs = 0;
     juce::String soundStatus;
     SoundOrigin origin;
+    std::vector<int> presetValues;  // message thread; see hasPreset()
+    void takePresetFromCurrent();
     uint32_t pcSeen = 0;          // message thread: last SynthLink program change handled
     double autoGetSoundMs = -1;   // message thread: when to read the sound after a program change
     void setSlot (int bank, int program);

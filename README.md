@@ -40,12 +40,24 @@ into. Picking a program reads it again from the synth (only a read), so a change
 button shows up; the plugin also reads the new sound (Get sound). A trailing **?** means the synth does not send its
 knob moves (Param Xmit is not NR), so edits made on the synth can't be seen until Get sound.
 
+## Distance from the preset (Panel tab)
+
+The preset is the sound the plugin last read from the synth (Get sound, also after a program is picked) or last saved.
+Until there is one, nothing is marked. Every value that differs from it shows it, always:
+
+- **Knob**: a small orange mark on the ring at the preset's value, and an orange arc from the mark to the pointer
+  (the longer, the further away). A difference of one step leaves a tiny arc, the mark is never smaller than a dot.
+  Click the mark, or double-click the knob, to put the preset's value back (it goes to the synth). Hover:
+  "preset 80, now 100, delta +20".
+- **Button, switch, LEDs, window**: a small orange dot at its corner. Click it to put the preset's value back.
+- **Reset to preset** (top bar): every parameter back to the preset, sent to the synth. Grey when nothing differs.
+
 ## Connection page
 
 The plugin opens on **Connection** unless the synth is fully connected (then it opens on **Panel**).
 
-- **Send NRPN**: *Direct to the synth's port* (the default in the standalone app) or *Through the host* (the default
-  in a DAW). Ports are picked by name; *Auto* takes the first port named "Trigon 6". A saved name still finds its
+- **Send NRPN**: *Direct to the synth's port* (the default, in the standalone app and in a DAW) or *Through the host*
+  (DAW MIDI out). A choice saved in a project stays as it was saved. Ports are picked by name; *Auto* takes the first port named "Trigon 6". A saved name still finds its
   port when Windows renames it ("2- Trigon 6 Module", "Trigon 6 Module [0]"). Ports reopen by themselves when the
   synth is switched on or plugged in. All plugin copies in one program share one connection.
 - **Verdict**: one line with the most likely cause and the one thing to do, e.g. which Globals button to press.
@@ -136,6 +148,7 @@ src/core/Globals.*      the synth's global settings: button row/number, NRPN, va
 src/core/Connection.*   the diagnosis: ladder, verdict, warnings, from a snapshot of what the MIDI layer saw
 src/core/PortMatch.*    finding a port by name when Windows renames it
 src/midi/SynthLink.*    JUCE: opens the synth's ports, reconnects, sends NRPN/SysEx, records replies
+src/core/PresetDiff.*   which parameters differ from the preset, the tooltip text
 src/ui/PanelLayout.*    where each parameter sits on the panel
 src/PluginProcessor.*   JUCE: parameters (APVTS) from the table, NRPN out in processBlock
 src/PluginEditor.*      JUCE: top bar, tabs, the panel
@@ -148,7 +161,8 @@ src/core/Presets.*      program names and labels, file names, stored program dum
 tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, globals, diagnosis rules, port names, table and layout
 ```
 
-`src/core` and `src/ui/PanelLayout` do not use JUCE, so the tests build in seconds.
+`src/core` and `src/ui/PanelLayout` do not use JUCE, so the tests build in seconds. `tests/ProcessorTest.cpp` (JUCE,
+local only: `-DT6_PLAYTEST=ON`) checks the preset reference, the reset and the output mode default on the processor.
 
 ## Roadmap
 
