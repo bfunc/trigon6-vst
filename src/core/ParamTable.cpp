@@ -120,7 +120,7 @@ std::vector<ParamDef> build()
 
         // Filter
         num  (29, "cutoff", "Cutoff", S::Filter, 0, 164),
-        num  (30, "resonance", "Resonance", S::Filter, 0, 127),
+        num  (30, "resonance", "Resonance", S::Filter, 0, 255), // one byte, 0..255: 172 of 399 stored programs are above 127
         pick (31, "filter_keyboard", "Filter Keyboard", S::Filter, { "Off", "Half", "Full" }),
         inverted (onOff (33, "filter_2pole", "2 Pole", S::Filter)),  // light was the wrong way round on the synth (2026-11-06)
 
