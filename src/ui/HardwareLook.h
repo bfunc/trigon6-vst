@@ -32,6 +32,11 @@ juce::Font titleFont (float height);    // Michroma, letter-spaced
 juce::Font segmentFont (float height);  // Share Tech Mono, for the red windows
 juce::Font labelFont (float height);    // small bold caps under the controls
 
+// Archivo and Archivo Narrow (SIL OFL) for the Panel tab: the narrow one for names, values and LED labels
+// (weights 500, 600, 700), the regular one for the menus (500, 600).
+juce::Typeface::Ptr archivoNarrow (int weight);
+juce::Typeface::Ptr archivo (int weight);
+
 void drawLed (juce::Graphics&, juce::Point<float> centre, float diameter, bool on);
 void drawPanelButton (juce::Graphics&, juce::Rectangle<float>, bool on, bool highlighted, bool down);
 void drawWood (juce::Graphics&, juce::Rectangle<float>, bool leftSide);

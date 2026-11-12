@@ -45,11 +45,12 @@ knob moves (Param Xmit is not NR), so edits made on the synth can't be seen unti
 The preset is the sound the plugin last read from the synth (Get sound, also after a program is picked) or last saved.
 Until there is one, nothing is marked. Every value that differs from it shows it, always:
 
-- **Knob**: a small orange mark on the ring at the preset's value, and an orange arc from the mark to the pointer
-  (the longer, the further away). A difference of one step leaves a tiny arc, the mark is never smaller than a dot.
-  Click the mark, or double-click the knob, to put the preset's value back (it goes to the synth). Hover:
-  "preset 80, now 100, delta +20".
-- **Button, switch, LEDs, window**: a small orange dot at its corner. Click it to put the preset's value back.
+- **Knob**: a grey arc on the ring from the preset's value to the pointer (the longer, the further away), ending in a
+  dot; a difference of one step still leaves a short arc. Double-click the knob to put the preset's value back (it goes
+  to the synth). Hover: "preset 80, now 100, delta +20".
+- **Button, switch, window**: a small grey dot at its corner. Click it to put the preset's value back.
+- **LED lists, octave dials, the keyboard row**: the preset's choice shows as a grey LED while another one is lit.
+- **Envelope displays** (filter, amp): the preset's shape is drawn dashed behind the current one; double-click puts it back.
 - **Reset to preset** (top bar): every parameter back to the preset, sent to the synth. Grey when nothing differs.
 
 ## Connection page
@@ -149,9 +150,10 @@ src/core/Connection.*   the diagnosis: ladder, verdict, warnings, from a snapsho
 src/core/PortMatch.*    finding a port by name when Windows renames it
 src/midi/SynthLink.*    JUCE: opens the synth's ports, reconnects, sends NRPN/SysEx, records replies
 src/core/PresetDiff.*   which parameters differ from the preset, the tooltip text
-src/ui/PanelLayout.*    where each parameter sits on the panel
+src/ui/PanelLayout.*    where each control sits on the panel (generated from docs/panel-mockup.html by tools/panel-geometry)
+src/ui/PanelView.*      JUCE: the Panel tab, drawn on a fixed canvas and scaled to the window
 src/PluginProcessor.*   JUCE: parameters (APVTS) from the table, NRPN out in processBlock
-src/PluginEditor.*      JUCE: top bar, tabs, the panel
+src/PluginEditor.*      JUCE: top bar, tabs
 src/ui/ConnectionPage.* JUCE: the Connection page
 src/ui/PresetsPage.*    JUCE: the Presets page (bank list, fetch, cache, .syx files)
 src/ui/SavePanel.*      JUCE: Save the current sound to a user slot, a .syx file, or both; Rename a program (backup + read-back)
@@ -159,6 +161,7 @@ src/ui/AppSettings.h    the shared settings file, Documents folders
 src/ui/PresetTypes.h    the type the user set per program (kept in the settings file)
 src/core/Presets.*      program names and labels, file names, stored program dumps, fetch queue
 tests/CoreTests.cpp     NRPN coding, packed format, SysEx, send queue, globals, diagnosis rules, port names, table and layout
+tests/PanelSnapshot.cpp JUCE, local only (-DT6_SNAPSHOT=ON): draws the Panel tab to a PNG, or clicks every control
 ```
 
 `src/core` and `src/ui/PanelLayout` do not use JUCE, so the tests build in seconds. `tests/ProcessorTest.cpp` (JUCE,

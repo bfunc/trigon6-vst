@@ -59,12 +59,18 @@ target_sources(Trigon6Control PRIVATE
     src/ui/ConnectionPage.cpp
     src/ui/PresetsPage.cpp
     src/ui/SavePanel.cpp
+    src/ui/PanelView.cpp
     src/ui/HardwareLook.cpp)
 
 # Panel fonts (SIL Open Font License, see assets/fonts/OFL-*.txt), compiled in as BinaryData.
 juce_add_binary_data(t6_fonts SOURCES
     assets/fonts/Michroma-Regular.ttf
-    assets/fonts/ShareTechMono-Regular.ttf)
+    assets/fonts/ShareTechMono-Regular.ttf
+    assets/fonts/ArchivoNarrow-Medium.ttf
+    assets/fonts/ArchivoNarrow-SemiBold.ttf
+    assets/fonts/ArchivoNarrow-Bold.ttf
+    assets/fonts/Archivo-Medium.ttf
+    assets/fonts/Archivo-SemiBold.ttf)
 set_target_properties(t6_fonts PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(Trigon6Control PRIVATE src)
@@ -101,4 +107,15 @@ if(T6_PLAYTEST)
     target_compile_definitions(t6_proctest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_Name="Trigon6 Control"
         T6_VERSION_LABEL="${T6_VERSION_LABEL}")
     target_link_libraries(t6_proctest PRIVATE Trigon6Control juce::juce_audio_utils juce::juce_audio_devices)
+endif()
+
+# A local tool that draws the Panel tab to a PNG (not in CI): cmake -DT6_SNAPSHOT=ON
+option(T6_SNAPSHOT "Build the panel picture tool" OFF)
+if(T6_SNAPSHOT)
+    juce_add_console_app(t6_snapshot PRODUCT_NAME "t6_snapshot")
+    target_sources(t6_snapshot PRIVATE tests/PanelSnapshot.cpp)
+    target_include_directories(t6_snapshot PRIVATE src)
+    target_compile_definitions(t6_snapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_Name="Trigon6 Control"
+        T6_VERSION_LABEL="${T6_VERSION_LABEL}")
+    target_link_libraries(t6_snapshot PRIVATE Trigon6Control juce::juce_audio_utils juce::juce_audio_devices)
 endif()

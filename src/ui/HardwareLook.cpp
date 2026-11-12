@@ -21,6 +21,21 @@ juce::Typeface::Ptr shareTechMono()
 }
 } // namespace
 
+juce::Typeface::Ptr archivoNarrow (int weight)
+{
+    static auto medium = juce::Typeface::createSystemTypefaceFor (BinaryData::ArchivoNarrowMedium_ttf, (size_t) BinaryData::ArchivoNarrowMedium_ttfSize);
+    static auto semi = juce::Typeface::createSystemTypefaceFor (BinaryData::ArchivoNarrowSemiBold_ttf, (size_t) BinaryData::ArchivoNarrowSemiBold_ttfSize);
+    static auto bold = juce::Typeface::createSystemTypefaceFor (BinaryData::ArchivoNarrowBold_ttf, (size_t) BinaryData::ArchivoNarrowBold_ttfSize);
+    return weight >= 700 ? bold : weight >= 600 ? semi : medium;
+}
+
+juce::Typeface::Ptr archivo (int weight)
+{
+    static auto medium = juce::Typeface::createSystemTypefaceFor (BinaryData::ArchivoMedium_ttf, (size_t) BinaryData::ArchivoMedium_ttfSize);
+    static auto semi = juce::Typeface::createSystemTypefaceFor (BinaryData::ArchivoSemiBold_ttf, (size_t) BinaryData::ArchivoSemiBold_ttfSize);
+    return weight >= 600 ? semi : medium;
+}
+
 juce::Font titleFont (float height)
 {
     return juce::Font (juce::FontOptions (michroma()).withHeight (height)).withExtraKerningFactor (0.12f);

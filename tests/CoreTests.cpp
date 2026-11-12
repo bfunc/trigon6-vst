@@ -399,11 +399,16 @@ static void testTable()
 
     // the panel shows every parameter exactly once and names nothing unknown
     std::map<std::string, int> onPanel;
-    for (const auto& s : t6ui::panelLayout())
-        for (const auto& row : s.rows)
-            for (const auto& cell : row)
-                if (! cell.empty() && cell[0] != '?')
-                    ++onPanel[cell];
+    int envelopes = 0;
+    for (const auto& c : t6ui::panelGeo().cells)
+    {
+        CHECK (c.main.w > 0.0f && c.main.h > 0.0f);
+        if (std::string (c.id).rfind ("env:", 0) == 0)
+            ++envelopes;
+        else
+            ++onPanel[c.id];
+    }
+    CHECK (envelopes == 2);
     for (const auto& p : t)
     {
         CHECK (onPanel[p.id] == 1);
