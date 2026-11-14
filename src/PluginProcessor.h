@@ -84,8 +84,8 @@ public:
     void setPortChoice (const juce::String& inputName, const juce::String& outputName);
 
     // Optional workaround, off by default: FL Studio's MIDI Out knocks the synth's Osc 1 Octave to +2 when the
-    // transport starts. With this on, the Osc 1 Octave from the last Get sound (or the last one the plugin sent)
-    // goes to the synth again 10 ms after each start.
+    // transport starts or stops. With this on, the Osc 1 Octave from the last Get sound (or the last one the plugin
+    // sent) goes to the synth again 10 ms after each start and stop.
     bool getResendOsc1OnPlay() const { return resendOsc1OnPlay.load(); }
     void setResendOsc1OnPlay (bool on);
 

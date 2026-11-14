@@ -341,12 +341,12 @@ void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::Midi
     audio.clear();
     midi.clear();  // incoming MIDI is not passed on (the plugin reads the synth through its own input port)
 
-    // Transport start: schedule the Osc 1 Octave restore (sent by the pump in direct mode, below in host mode).
+    // Transport start or stop: schedule the Osc 1 Octave restore (sent by the pump in direct mode, below in host mode).
     bool playing = false;
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
             playing = pos->getIsPlaying();
-    if (playing && ! wasPlaying && resendOsc1OnPlay.load())
+    if (playing != wasPlaying && resendOsc1OnPlay.load())
         osc1ResendAtMs = juce::Time::getMillisecondCounterHiRes() + kOsc1ResendDelayMs;
     wasPlaying = playing;
 

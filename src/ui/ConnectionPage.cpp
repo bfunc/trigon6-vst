@@ -103,8 +103,8 @@ ConnectionPage::ConnectionPage (Trigon6Processor& p) : proc (p)
         addChildComponent (*b);
     playNote.setVisible (true);
 
-    resendOsc1.setTooltip ("Workaround for FL Studio's MIDI Out, which sets the synth's Osc 1 Octave to +2 when playback starts. "
-                           "When on, 10 ms after each start the plugin sends the Osc 1 Octave from the last Get sound "
+    resendOsc1.setTooltip ("Workaround for FL Studio's MIDI Out, which sets the synth's Osc 1 Octave to +2 when playback starts or stops. "
+                           "When on, 10 ms after each start and stop the plugin sends the Osc 1 Octave from the last Get sound "
                            "(or the last change made in the plugin) again.");
     resendOsc1.setColour (juce::ToggleButton::textColourId, theme::text);
     resendOsc1.setToggleState (proc.getResendOsc1OnPlay(), juce::dontSendNotification);
