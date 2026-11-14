@@ -83,6 +83,12 @@ public:
     void setHostOutput (bool host);
     void setPortChoice (const juce::String& inputName, const juce::String& outputName);
 
+    // Optional workaround, off by default: FL Studio's MIDI Out knocks the synth's Osc 1 Octave to +2 when the
+    // transport starts. With this on, the Osc 1 Octave from the last Get sound (or the last one the plugin sent)
+    // goes to the synth again 10 ms after each start.
+    bool getResendOsc1OnPlay() const { return resendOsc1OnPlay.load(); }
+    void setResendOsc1OnPlay (bool on);
+
 private:
     template <typename Emit>
     void runQueue (Emit&& emit);  // the caller holds queueLock
@@ -90,6 +96,8 @@ private:
     void timerCallback() override;  // message thread: takes knob moves the synth sent
     void applyFromSynth (size_t index, int value);  // queueLock held: set without sending it back
     void applySound (const std::vector<uint8_t>& data);
+    template <typename Emit>
+    void resendOsc1IfDue (Emit&& emit);  // the caller holds queueLock
 
     struct Pump : juce::Thread
     {
@@ -116,6 +124,10 @@ private:
     std::atomic<bool> sendAllRequested { false };
     std::atomic<bool> needsPrime { true };  // after load: take current values as "already on the synth"
     std::atomic<int> sentCount { 0 };
+    std::atomic<bool> resendOsc1OnPlay { false };
+    std::atomic<int> osc1Octave { -1 };       // NRPN value to restore on play; -1 = none yet
+    std::atomic<double> osc1ResendAtMs { -1 };  // when the restore is due; -1 = none pending
+    bool wasPlaying = false;                    // audio thread: transport state in the last block
     uint32_t incomingSeen = 0;  // message thread: last SynthLink::readIncoming seq applied
     bool soundPending = false;  // message thread: Get sound is waiting for the dump
     uint32_t soundSeq = 0;

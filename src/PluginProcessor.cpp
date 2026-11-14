@@ -12,6 +12,9 @@ const juce::Identifier kChannel { "midiChannel" };
 const juce::Identifier kOutputMode { "outputMode" };  // "host" or "direct"
 const juce::Identifier kInPort { "inputPort" };       // "" = automatic
 const juce::Identifier kOutPort { "outputPort" };
+const juce::Identifier kResendOsc1 { "resendOsc1OnPlay" };
+constexpr double kOsc1ResendDelayMs = 10.0;
+const int kOsc1OctaveNrpn = 0;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout Trigon6Processor::createLayout()
@@ -247,6 +250,8 @@ void Trigon6Processor::applySound (const std::vector<uint8_t>& data)
             continue;
         }
         applyFromSynth (i, v);
+        if (p.nrpn == kOsc1OctaveNrpn)
+            osc1Octave = v;
         ++set;
     }
     takePresetFromCurrent();
@@ -268,6 +273,26 @@ void Trigon6Processor::setPortChoice (const juce::String& inputName, const juce:
     link->setPortChoice (inputName, outputName);
     apvts.state.setProperty (kInPort, inputName, nullptr);
     apvts.state.setProperty (kOutPort, outputName, nullptr);
+}
+
+void Trigon6Processor::setResendOsc1OnPlay (bool on)
+{
+    resendOsc1OnPlay = on;
+    apvts.state.setProperty (kResendOsc1, on, nullptr);
+}
+
+template <typename Emit>
+void Trigon6Processor::resendOsc1IfDue (Emit&& emit)
+{
+    const double due = osc1ResendAtMs.load();
+    if (due < 0 || juce::Time::getMillisecondCounterHiRes() < due)
+        return;
+    osc1ResendAtMs = -1;
+    const int v = osc1Octave.load();
+    if (v < 0 || ! resendOsc1OnPlay.load())
+        return;
+    emit (midiChannel.load(), kOsc1OctaveNrpn, v);
+    ++sentCount;
 }
 
 void Trigon6Processor::setMidiChannel (int ch)
@@ -301,6 +326,8 @@ void Trigon6Processor::runQueue (Emit&& emit)
     const int ch = midiChannel.load();
     queue.collect (juce::Time::getMillisecondCounterHiRes(), [&] (size_t i, int value)
     {
+        if (table[i].nrpn == kOsc1OctaveNrpn)
+            osc1Octave = value;  // a change made in the plugin is the one to restore from now on
         for (const auto& nv : t6::nrpnValues (table[i], value))
         {
             emit (ch, nv.nrpn, nv.value);
@@ -314,6 +341,15 @@ void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::Midi
     audio.clear();
     midi.clear();  // incoming MIDI is not passed on (the plugin reads the synth through its own input port)
 
+    // Transport start: schedule the Osc 1 Octave restore (sent by the pump in direct mode, below in host mode).
+    bool playing = false;
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+            playing = pos->getIsPlaying();
+    if (playing && ! wasPlaying && resendOsc1OnPlay.load())
+        osc1ResendAtMs = juce::Time::getMillisecondCounterHiRes() + kOsc1ResendDelayMs;
+    wasPlaying = playing;
+
     if (! link->isHostOutput())
         return;
 
@@ -321,12 +357,14 @@ void Trigon6Processor::processBlock (juce::AudioBuffer<float>& audio, juce::Midi
     const juce::ScopedTryLock sl (queueLock);
     if (! sl.isLocked())
         return;  // a mode switch is in progress; the next block sends
-    runQueue ([&] (int ch, int param, int value)
+    auto toHost = [&] (int ch, int param, int value)
     {
         for (auto cc : t6::encodeNrpn (param, value))
             midi.addEvent (juce::MidiMessage::controllerEvent (ch, cc.controller, cc.value), 0);
         link->noteSentThroughHost (param, value);
-    });
+    };
+    runQueue (toHost);
+    resendOsc1IfDue (toHost);
 }
 
 void Trigon6Processor::pumpDirect()
@@ -335,7 +373,9 @@ void Trigon6Processor::pumpDirect()
     if (link->isHostOutput() || ! link->isOutputOpen())
         return;
     const juce::ScopedLock sl (queueLock);
-    runQueue ([&] (int ch, int param, int value) { link->sendNrpn (ch, param, value); });
+    auto toPort = [&] (int ch, int param, int value) { link->sendNrpn (ch, param, value); };
+    runQueue (toPort);
+    resendOsc1IfDue (toPort);
 }
 
 void Trigon6Processor::getStateInformation (juce::MemoryBlock& dest)
@@ -354,6 +394,7 @@ void Trigon6Processor::setStateInformation (const void* data, int size)
             if (apvts.state.hasProperty (kOutputMode))
                 link->setHostOutput (apvts.state.getProperty (kOutputMode).toString() == "host");
             link->setPortChoice (apvts.state.getProperty (kInPort).toString(), apvts.state.getProperty (kOutPort).toString());
+            resendOsc1OnPlay = (bool) apvts.state.getProperty (kResendOsc1, false);
             needsPrime = true;  // a loaded project does not overwrite the synth; "Send all" does that
         }
 }

@@ -41,6 +41,7 @@ private:
     juce::ComboBox outputMode, inPort, outPort;
     juce::TextButton check { "Check" }, playNote { "Play test note" }, heard { "I heard it" }, notHeard { "No sound" };
     juce::TextButton useChannel;
+    juce::ToggleButton resendOsc1 { "Re-send Osc 1 Octave on play" };
     juce::StringArray inNames, outNames;
 
     juce::Rectangle<int> checklistArea, globalsArea, statusArea;

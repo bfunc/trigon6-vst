@@ -96,6 +96,11 @@ That part is ordinary FL routing.
 **Send all** pushes every parameter to the synth. A project that loads does **not** send anything: the synth keeps its
 own sound until you press Send all or move a control.
 
+**Osc 1 Octave jumps to +2 when FL starts playing.** FL's MIDI Out sends something at transport start that the synth
+takes as Osc 1 Octave (turning MIDI Out off stops it). Workaround, off by default: Connection page →
+**Re-send Osc 1 Octave on play**. 10 ms after each start the plugin sends Osc 1 Octave again: the value from the last
+Get sound, or the last change made in the plugin. It is saved with the project.
+
 ## How sending works
 
 - Each change goes out as 4 CCs: 99 (parameter MSB), 98 (parameter LSB), 6 (value MSB), 38 (value LSB).

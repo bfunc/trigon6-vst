@@ -103,6 +103,14 @@ ConnectionPage::ConnectionPage (Trigon6Processor& p) : proc (p)
         addChildComponent (*b);
     playNote.setVisible (true);
 
+    resendOsc1.setTooltip ("Workaround for FL Studio's MIDI Out, which sets the synth's Osc 1 Octave to +2 when playback starts. "
+                           "When on, 10 ms after each start the plugin sends the Osc 1 Octave from the last Get sound "
+                           "(or the last change made in the plugin) again.");
+    resendOsc1.setColour (juce::ToggleButton::textColourId, theme::text);
+    resendOsc1.setToggleState (proc.getResendOsc1OnPlay(), juce::dontSendNotification);
+    resendOsc1.onClick = [this] { proc.setResendOsc1OnPlay (resendOsc1.getToggleState()); };
+    addAndMakeVisible (resendOsc1);
+
     monitorTitle.setText ("NRPN from the synth (newest first): turn a knob or press a button on the synth", juce::dontSendNotification);
     monitorTitle.setColour (juce::Label::textColourId, theme::dim);
     addAndMakeVisible (monitorTitle);
@@ -215,6 +223,7 @@ void ConnectionPage::resized()
     notHeard.setBounds (tests.removeFromLeft (100));
     tests.removeFromLeft (16);
     useChannel.setBounds (tests.removeFromLeft (140));
+    resendOsc1.setBounds (tests.removeFromRight (240));
 
     r.removeFromTop (12);
     statusArea = r.removeFromBottom (20);
