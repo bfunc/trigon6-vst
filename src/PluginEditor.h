@@ -33,7 +33,42 @@ private:
     juce::TextButton sendAll { "Send all" };
     juce::TextButton getSound { "Get sound" };
     juce::TextButton save { "Save" };
-    juce::TextButton resetAll { "Reset to preset" };
+    juce::TextButton resetAll { "Reset" };  // to the preset (tooltip)
+    // Hold to hear the preset; release to go back to the edit. Releases on mouse up, focus loss or disable.
+    struct HoldButton : juce::TextButton
+    {
+        using juce::TextButton::TextButton;
+        ~HoldButton() override { release(); }
+        std::function<void()> onPress, onRelease;
+        bool held = false;
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            if (! isEnabled() || held)
+                return;
+            held = true;
+            setToggleState (true, juce::dontSendNotification);
+            if (onPress)
+                onPress();
+        }
+        void mouseUp (const juce::MouseEvent&) override { release(); }
+        void focusLost (FocusChangeType) override { release(); }
+        void enablementChanged() override
+        {
+            juce::TextButton::enablementChanged();
+            if (! isEnabled())
+                release();
+        }
+        void release()
+        {
+            if (! held)
+                return;
+            held = false;
+            setToggleState (false, juce::dontSendNotification);
+            if (onRelease)
+                onRelease();
+        }
+    };
+    HoldButton compare { "Compare" };
     void openSave();
     void openPanel (int bank, int program, bool rename);
     std::unique_ptr<SavePanel> savePanel;

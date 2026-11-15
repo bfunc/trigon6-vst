@@ -222,6 +222,16 @@ void Trigon6Processor::resetToPreset (size_t i)
         setParamTo (i, presetValues[i]);
 }
 
+void Trigon6Processor::beginCompare()
+{
+    if (previewing.load() || ! hasPreset() || presetDiffCount() == 0)
+        return;
+    previewValues = presetValues;
+    previewing.store (true, std::memory_order_release);
+}
+
+void Trigon6Processor::endCompare() { previewing.store (false, std::memory_order_release); }
+
 void Trigon6Processor::resetAllToPreset()
 {
     for (const auto i : t6::differingParams (presetValues, currentValues()))
@@ -307,8 +317,11 @@ void Trigon6Processor::runQueue (Emit&& emit)
 {
     const auto& table = t6::paramTable();
     // A choice parameter's raw value is the choice index, counted from the NRPN minimum.
+    const bool preview = previewing.load (std::memory_order_acquire);
     auto valueOf = [&] (size_t i)
     {
+        if (preview && i < previewValues.size())
+            return previewValues[i];  // Compare held: the synth plays the preset
         const int v = (int) std::lround (raw[i]->load());
         return table[i].kind == t6::Kind::Choice ? table[i].min + v : v;
     };

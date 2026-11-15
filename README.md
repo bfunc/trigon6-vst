@@ -51,7 +51,9 @@ Until there is one, nothing is marked. Every value that differs from it shows it
 - **Button, switch, window**: a small grey dot at its corner. Click it to put the preset's value back.
 - **LED lists, octave dials, the keyboard row**: the preset's choice shows as a grey LED while another one is lit.
 - **Envelope displays** (filter, amp): the preset's shape is drawn dashed behind the current one; double-click puts it back.
-- **Reset to preset** (top bar): every parameter back to the preset, sent to the synth. Grey when nothing differs.
+- **Reset** (top bar): every parameter back to the preset, sent to the synth. Grey when nothing differs.
+- **Compare** (top bar): hold to hear the preset, release to go back to your edit. Only the parameters that differ
+  are sent (NRPN); the panel keeps showing the edit. Grey when nothing differs.
 
 ## Connection page
 

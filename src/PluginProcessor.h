@@ -77,6 +77,11 @@ public:
     void setParamTo (size_t index, int value);
     void resetToPreset (size_t index);
     void resetAllToPreset();
+    // Compare: while held, the synth plays the preset (only the differing parameters go out as NRPN); the panel keeps
+    // showing the edit. Message thread. begin does nothing without a preset or when nothing differs.
+    void beginCompare();
+    void endCompare();
+    bool comparing() const { return previewing.load(); }
 
     SynthLink& getLink() { return *link; }
     bool isHostOutput() const { return link->isHostOutput(); }
@@ -135,6 +140,8 @@ private:
     juce::String soundStatus;
     SoundOrigin origin;
     std::vector<int> presetValues;  // message thread; see hasPreset()
+    std::atomic<bool> previewing { false };
+    std::vector<int> previewValues;  // written only while previewing is false; read by the senders while it is true
     void takePresetFromCurrent();
     uint32_t pcSeen = 0;          // message thread: last SynthLink program change handled
     double autoGetSoundMs = -1;   // message thread: when to read the sound after a program change

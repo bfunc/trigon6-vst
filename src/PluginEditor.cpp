@@ -69,10 +69,15 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     getSound.setTooltip ("Read the synth's current sound into the plugin (sends nothing that changes the sound)");
     getSound.onClick = [this] { proc.requestGetSound(); };
     addAndMakeVisible (getSound);
-    resetAll.setTooltip ("Put every parameter back to the preset (the sound read from the synth or last saved) and send it to the synth");
+    resetAll.setTooltip ("Reset to preset: put every parameter back to the preset (the sound read from the synth or last saved) and send it to the synth");
     resetAll.onClick = [this] { proc.resetAllToPreset(); };
     resetAll.setEnabled (false);
     addAndMakeVisible (resetAll);
+    compare.setTooltip ("Hold to hear the preset (the sound read from the synth or last saved); release to go back to your edit");
+    compare.onPress = [this] { proc.beginCompare(); };
+    compare.onRelease = [this] { proc.endCompare(); };
+    compare.setEnabled (false);
+    addAndMakeVisible (compare);
     save.setTooltip ("Save the current sound into a user slot on the synth, a .syx file on the PC, or both");
     save.onClick = [this] { openSave(); };
     addAndMakeVisible (save);
@@ -150,11 +155,13 @@ void Trigon6Editor::resized()
     auto r = getLocalBounds().reduced (kWood, 0);
     auto bar = r.removeFromTop (kTopBar).reduced (18, 11);
     bar.removeFromLeft (330);  // the painted title
-    status.setBounds (bar.removeFromRight (150));
+    status.setBounds (bar.removeFromRight (110));
     bar.removeFromRight (12);
     sendAll.setBounds (bar.removeFromRight (104));
     bar.removeFromRight (8);
-    resetAll.setBounds (bar.removeFromRight (122));
+    resetAll.setBounds (bar.removeFromRight (70));
+    bar.removeFromRight (8);
+    compare.setBounds (bar.removeFromRight (84));
     bar.removeFromRight (8);
     save.setBounds (bar.removeFromRight (80));
     bar.removeFromRight (8);
@@ -213,6 +220,7 @@ void Trigon6Editor::timerCallback()
     soundStatus.setText (s, juce::dontSendNotification);
     soundStatus.setTooltip (s);
     resetAll.setEnabled (proc.hasPreset() && proc.presetDiffCount() > 0);
+    compare.setEnabled (compare.held || (proc.hasPreset() && proc.presetDiffCount() > 0));
     updateSync();
 }
 
