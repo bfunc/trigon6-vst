@@ -46,7 +46,7 @@ public:
     void setMidiChannel (int ch);
     void requestSendAll() { sendAllRequested = true; }
     // Get sound: ask the synth for its current sound and set the parameters from it (message thread).
-    // Each parameter is read from the byte at its NRPN number; that position is a guess being tested.
+    // Each parameter is read from the byte at its NRPN number (checked against 1000 stored programs: every value in range).
     void requestGetSound();
     juce::String getSoundStatus() const { return soundStatus; }  // message thread
     int getSentCount() const { return sentCount.load(); }

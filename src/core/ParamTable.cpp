@@ -104,9 +104,9 @@ std::vector<ParamDef> build()
         onOff (11, "osc1_pulse", "Osc 1 Pulse", S::Oscillators),
         onOff (12, "osc2_pulse", "Osc 2 Pulse", S::Oscillators),
         onOff (13, "osc3_pulse", "Osc 3 Pulse", S::Oscillators),
-        num  (14, "osc1_pw", "Osc 1 PW", S::Oscillators, 0, 127),
-        num  (15, "osc2_pw", "Osc 2 PW", S::Oscillators, 0, 127),
-        num  (16, "osc3_pw", "Osc 3 PW", S::Oscillators, 0, 127),
+        num  (14, "osc1_pw", "Osc 1 PW", S::Oscillators, 0, 255), // one byte, 0..255 (127 = square): about 1 in 3 stored programs are above 127
+        num  (15, "osc2_pw", "Osc 2 PW", S::Oscillators, 0, 255), // one byte, 0..255 (127 = square): about 1 in 3 stored programs are above 127
+        num  (16, "osc3_pw", "Osc 3 PW", S::Oscillators, 0, 255), // one byte, 0..255 (127 = square): about 1 in 3 stored programs are above 127
         onOff (20, "osc2_sync", "Sync Osc 2", S::Oscillators),          // manual: "Osc 1 Sync"
         onOff (21, "osc3_keyboard", "Osc 3 Keyboard", S::Oscillators),  // manual: "Osc 1 Keyboard"; only Osc 3 has it
 
@@ -140,7 +140,7 @@ std::vector<ParamDef> build()
         onOff (48, "vca_velocity", "Amp Velocity", S::AmpEnv),
 
         // LFO
-        num  (64, "lfo_freq", "LFO Freq", S::Lfo, 0, 254),
+        num  (64, "lfo_freq", "LFO Freq", S::Lfo, 0, 255), // one byte, 0..255: 8 of 1000 stored programs hold 255
         onOff (66, "lfo_sync", "LFO Sync", S::Lfo),
         pick (67, "lfo_shape", "LFO Shape", S::Lfo, { "Triangle", "Saw", "Rev Saw", "Square", "Random" }), // 0-4, checked on the synth
         num  (68, "lfo_amount", "LFO Amount", S::Lfo, 0, 255),
@@ -179,13 +179,13 @@ std::vector<ParamDef> build()
         onOff (51, "fx_on", "FX On", S::Effects),
         pick (49, "fxa_type", "FX A Type", S::Effects, fxA),
         num  (53, "fxa_mix", "FX A Dry/Wet", S::Effects, 0, 127),
-        num  (55, "fxa_param1", "FX A Param 1", S::Effects, 0, 127),
+        num  (55, "fxa_param1", "FX A Param 1", S::Effects, 0, 255), // one byte, 0..255 on delays / reverbs (also when synced)
         num  (57, "fxa_param2", "FX A Param 2", S::Effects, 0, 127),
         onOff (59, "fxa_sync", "FX A Sync", S::Effects),
         pick (50, "fxb_type", "FX B Type", S::Effects,
               { "Off", "BBD", "DDL", "Chorus", "PH1", "PH2", "PH3", "Ring", "FL1", "FL2", "Hall", "Room", "Plate", "Spring" }),
         num  (54, "fxb_mix", "FX B Dry/Wet", S::Effects, 0, 127),
-        num  (56, "fxb_param1", "FX B Param 1", S::Effects, 0, 127),
+        num  (56, "fxb_param1", "FX B Param 1", S::Effects, 0, 255), // one byte, 0..255 on delays / reverbs (also when synced)
         num  (58, "fxb_param2", "FX B Param 2", S::Effects, 0, 127),
         onOff (60, "fxb_sync", "FX B Sync", S::Effects),
 

@@ -396,6 +396,9 @@ static void testTable()
     CHECK (formatValue (t[(size_t) indexOfNrpn (97)], 1) == "High" && formatValue (t[(size_t) indexOfNrpn (97)], 3) == "Low R");
     CHECK (formatValue (t[(size_t) indexOfNrpn (2)], 0) == "Lo" && formatValue (t[(size_t) indexOfNrpn (2)], 5) == "+2");
     CHECK (t[(size_t) indexOfNrpn (28)].min == 0 && t[(size_t) indexOfNrpn (28)].max == 254);
+    // one byte, 0..255, as found in 1000 stored programs (the manual says 0..127 / 0..254)
+    for (int n : { 14, 15, 16, 30, 55, 56, 64 })
+        CHECK (t[(size_t) indexOfNrpn (n)].max == 255);
 
     // the panel shows every parameter exactly once and names nothing unknown
     std::map<std::string, int> onPanel;

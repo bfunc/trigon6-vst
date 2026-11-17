@@ -4,9 +4,9 @@ A VST3 plugin (plus a standalone app) for Windows that controls a Sequential Tri
 Every program parameter of the synth is a plugin parameter you can automate. When one changes, the plugin sends it
 to the synth as an NRPN.
 
-Status: **stage 2**. The parameters, NRPN output (through the host or straight to the synth's USB port), the MIDI
-channel, the panel UI and a Connection page work. Still to do: parameters following the synth's own knobs, and
-Get patch over SysEx (see [Roadmap](#roadmap)).
+Status: **0.1.1**, in use on a Trigon-6 (firmware 1.0) in FL Studio. Every program parameter as NRPN (through the host or
+straight to the synth's USB port), the panel follows the synth's own knobs, Get sound reads the current sound over
+SysEx, Presets tab, Save to a slot or .syx, Compare / Reset against the preset, and a Connection page.
 
 ## Download
 
@@ -21,10 +21,10 @@ FL Studio scans, then rescan plugins in FL.
 | Global | Set to | Why |
 |---|---|---|
 | Param Rcv | **NR** | The plugin sends NRPN. CC covers only some parameters and only 0–127. |
-| Param Xmit | **NR** | The synth reports knob moves back. This becomes useful in stage 4. |
+| Param Xmit | **NR** | The synth reports knob moves back, and the panel follows them. |
 | MIDI Channel | the same channel as in the plugin (or All) | |
 | MIDI Out | **USB** | when the synth is connected by USB |
-| MIDI SysEx | **USB** | for Get patch (stage 5) |
+| MIDI SysEx | **USB** | for Get sound, Presets and Save |
 
 ## Is the sound saved? (top bar)
 
@@ -125,8 +125,10 @@ Notes on the manuals:
   what the synth sends: Noise = 22 (0–127), Feedback◂▸Drive = 28 (0–254, centre 127, left = feedback, right = drive),
   LFO Shape = 67 (0–4: Triangle, Saw, Reverse Saw, Square, Random, in the manual's order).
 - NRPN 63 "Distortion" is the Distortion knob in the Master section.
-- The manual does not number every list. These value orders are guesses to check on the synth: Osc 3 Octave (Lo first?)
-  and Key Mode.
+- The manual does not number every list. Osc 3 Octave (Lo, -2 .. +2) and Key Mode (Lo, Hi, LAS, LoR, HiR, LAr) were
+  checked on the synth with the NRPN monitor.
+- Some ranges in the manual are too small. In 1000 stored programs Resonance, Osc 1-3 PW, LFO Freq and FX A/B Param 1
+  use the whole byte (0-255), so the plugin uses 0-255 for them.
 - Left out on purpose: Sequencer Rec On (106), the program name and the sequencer steps.
 
 ## Build
@@ -178,11 +180,11 @@ local only: `-DT6_PLAYTEST=ON`) checks the preset reference, the reset and the o
 
 1. ✅ Parameters, NRPN out, MIDI channel, rate limit, panel UI.
 2. ✅ MIDI output: the plugin's MIDI out (FL) or the synth's port picked in the plugin. Connection page.
-3. Panel polish.
-4. Feedback: NRPNs from the synth update the plugin without being sent back. A monitor shows unknown NRPN numbers
-   (for parameters still missing from the table).
-5. Get patch: request the edit buffer and unpack it. An explore mode writes hex dumps and compares two of them, to find
-   where each parameter sits in the 1024 bytes.
+3. ✅ Panel: the hardware-style design from the mockup, distance from the preset, Reset, Compare.
+4. ✅ Feedback: NRPNs from the synth update the plugin without being sent back; an NRPN monitor on the Connection page.
+5. ✅ Get sound: the edit buffer over SysEx, each parameter read at its NRPN number (checked across 1000 stored
+   programs). Presets tab, Save to a slot (with backup and read-back) or a .syx file.
+6. Not done yet: the global dump's byte order (Connection page marks values seen only there with "?").
 
 ## Licence
 
