@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Trigon6Control VERSION 0.1.1 LANGUAGES C CXX)
-set(T6_VERSION_LABEL "0.1.1")  # the next release; raise it right after each release
+project(Trigon6Control VERSION 0.1.2 LANGUAGES C CXX)
+set(T6_VERSION_LABEL "0.1.2")  # the next release; raise it right after each release
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
