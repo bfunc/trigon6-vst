@@ -134,7 +134,7 @@ ConnectionPage::ConnectionPage (Trigon6Processor& p) : proc (p)
     watchStats.setMinimumHorizontalScale (0.7f);
     addAndMakeVisible (watchStats);
 
-    monitorTitle.setText ("NRPN from the synth (newest first): turn a knob or press a button on the synth", juce::dontSendNotification);
+    monitorTitle.setText ("Monitor (newest first): <- from the synth, -> to it. NRPN knob moves from the synth, program changes and SysEx both ways", juce::dontSendNotification);
     monitorTitle.setColour (juce::Label::textColourId, theme::dim);
     addAndMakeVisible (monitorTitle);
     monitor.setMultiLine (true);
@@ -152,6 +152,7 @@ ConnectionPage::ConnectionPage (Trigon6Processor& p) : proc (p)
     };
     addAndMakeVisible (clearMonitor);
     monitorSeen = proc.getLink().incomingSeq();
+    logSeen = proc.getLink().logSeq();
 
     timerCallback();
     startTimerHz (5);
@@ -191,10 +192,14 @@ void ConnectionPage::timerCallback()
                 name = t6::paramTable()[(size_t) i].name;
             else if (const auto* g = t6::globalByNrpn (e.param))
                 name = juce::String ("Global ") + g->name;
-            monitorLines.insert (0, juce::Time::getCurrentTime().formatted ("%H:%M:%S") + "   ch " + juce::String (e.channel)
-                                        + "   NRPN " + juce::String (e.param) + " = " + juce::String (e.value) + "   (" + name + ")");
+            monitorLines.insert (0, juce::Time::getCurrentTime().formatted ("%H:%M:%S") + "   <-  NRPN ch " + juce::String (e.channel)
+                                        + ":  " + juce::String (e.param) + " = " + juce::String (e.value) + "   (" + name + ")");
         }
-        if (! events.empty())
+        std::vector<juce::String> log;
+        logSeen = proc.getLink().readLog (logSeen, log);
+        for (const auto& l : log)
+            monitorLines.insert (0, l);
+        if (! events.empty() || ! log.empty())
         {
             monitorLines.removeRange (60, monitorLines.size());
             monitor.setText (monitorLines.joinIntoString ("\n"), false);

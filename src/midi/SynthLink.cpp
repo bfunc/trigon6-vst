@@ -17,6 +17,34 @@ constexpr int kProbeStepTicks = 5;   // the three Check requests go out 250 ms a
 constexpr double kEchoWindowMs = 300;
 constexpr int kTestNote = 60;
 
+// A SysEx message for the monitor: what it is and its size. d/n: the bytes between F0 and F7.
+juce::String describeSysex (const uint8_t* d, size_t n)
+{
+    juce::String what;
+    if (n >= 4 && d[0] == 0x7E && d[2] == 0x06 && d[3] == 0x01)
+        what = "device inquiry";
+    else if (n >= 4 && d[0] == 0x7E && d[2] == 0x06 && d[3] == 0x02)
+        what = "device inquiry reply";
+    else if (n >= 3 && d[0] == t6::kDsiId)
+    {
+        const auto op = d[2];
+        auto slot = [&] { return n >= 5 ? juce::String (t6::programLabel (d[3], d[4])) : juce::String ("?"); };
+        switch (op)
+        {
+            case 0x06: what = "request the current sound (edit buffer)"; break;
+            case 0x05: what = "request program " + slot(); break;
+            case 0x0E: what = "request globals"; break;
+            case 0x03: what = "current sound (edit buffer dump)"; break;
+            case 0x02: what = "program " + slot() + " (program dump)"; break;
+            case 0x0F: what = "globals dump"; break;
+            default: break;
+        }
+    }
+    if (what.isEmpty())
+        what = juce::String ("F0 ") + t6::toHex (d, n, 8);
+    return "SysEx " + what + ", " + juce::String ((int) n + 2) + " bytes";
+}
+
 std::atomic<int> portsClosing { 0 };  // closes still running on their own threads
 
 bool waitForCloses (int ms)
@@ -341,6 +369,7 @@ void SynthLink::sendSysex (const std::vector<uint8_t>& message)
 {
     if (message.size() < 2)
         return;
+    addLog ("->  " + describeSysex (message.data() + 1, message.size() - 2));
     // JUCE adds F0 and F7 itself.
     sendMessage (juce::MidiMessage::createSysExMessage (message.data() + 1, (int) message.size() - 2));
 }
@@ -366,6 +395,7 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
         const auto id = (uint8_t) sysexId.load();
         const juce::ScopedLock sl (stateLock);
         state.lastAnyInMs = t;
+        addLog ("<-  " + describeSysex (d, n));
         auto noteOther = [&] { state.otherSysex = std::to_string (n + 2) + " bytes: F0 " + t6::toHex (d, n, 16); };
         switch (t6::classifySysex (d, n, id))
         {
@@ -424,6 +454,8 @@ void SynthLink::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMes
         const juce::ScopedLock sl (stateLock);
         state.lastAnyInMs = t;
         pcIn = { pcIn.seq + 1, m.getChannel(), bankIn[(size_t) (m.getChannel() - 1)], m.getProgramChangeNumber() };
+        addLog ("<-  Program Change ch " + juce::String (pcIn.channel) + ": " + juce::String (t6::programLabel (pcIn.bank, pcIn.program))
+                + " (bank " + juce::String (pcIn.bank) + ", program " + juce::String (pcIn.program) + ")");
         return;
     }
     if (m.isController() && (m.getControllerNumber() == 0 || m.getControllerNumber() == 32))
@@ -518,6 +550,30 @@ void SynthLink::sendProgramChange (int channel, int bank, int program)
     sendMessage (juce::MidiMessage::controllerEvent (channel, 0, 0));
     sendMessage (juce::MidiMessage::controllerEvent (channel, 32, bank));
     sendMessage (juce::MidiMessage::programChange (channel, program));
+    addLog ("->  Program Change ch " + juce::String (channel) + ": " + juce::String (t6::programLabel (bank, program)));
+}
+
+void SynthLink::addLog (const juce::String& text)
+{
+    const auto line = juce::Time::getCurrentTime().formatted ("%H:%M:%S") + "   " + text;
+    const juce::ScopedLock sl (stateLock);
+    ++logLineSeq;
+    logLines[logLineSeq % logLines.size()] = line;
+}
+
+uint32_t SynthLink::logSeq() const
+{
+    const juce::ScopedLock sl (stateLock);
+    return logLineSeq;
+}
+
+uint32_t SynthLink::readLog (uint32_t afterSeq, std::vector<juce::String>& out) const
+{
+    const juce::ScopedLock sl (stateLock);
+    const uint32_t from = logLineSeq - afterSeq > logLines.size() ? logLineSeq - (uint32_t) logLines.size() : afterSeq;
+    for (uint32_t s = from + 1; s <= logLineSeq; ++s)
+        out.push_back (logLines[s % logLines.size()]);
+    return logLineSeq;
 }
 
 SynthLink::ProgramChangeIn SynthLink::lastProgramChange() const

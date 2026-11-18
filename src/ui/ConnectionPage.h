@@ -57,6 +57,7 @@ private:
     juce::TextButton clearMonitor { "Clear" };
     juce::StringArray monitorLines;
     uint32_t monitorSeen = 0;
+    uint32_t logSeen = 0;  // program changes and SysEx (SynthLink::readLog)
     int ticks = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConnectionPage)

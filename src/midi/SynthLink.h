@@ -69,6 +69,11 @@ public:
     uint32_t readIncoming (uint32_t afterSeq, std::vector<InEvent>& out) const;
     uint32_t incomingSeq() const;
 
+    // Everything that isn't a parameter, both ways, for the Connection tab's monitor: program changes and SysEx
+    // ("<-" from the synth, "->" to it), each line with the time it happened.
+    uint32_t readLog (uint32_t afterSeq, std::vector<juce::String>& out) const;
+    uint32_t logSeq() const;
+
     // The current sound: ask for the edit buffer; each good dump that arrives bumps editBufferSeq.
     void requestEditBuffer();
     uint32_t editBufferSeq() const;
@@ -148,6 +153,9 @@ private:
     ProgramChangeIn pcIn;               // guarded by stateLock
     std::array<int, 16> bankIn {};      // MIDI thread: the last Bank Select per channel
     uint32_t editSeq = 0;               // guarded by stateLock
+    std::array<juce::String, 128> logLines;  // ring, guarded by stateLock
+    uint32_t logLineSeq = 0;                 // guarded by stateLock
+    void addLog (const juce::String& text);  // any thread; takes stateLock
 
     int probeStep = -1;  // message thread: next request of a running Check
     int ticks = 0;
