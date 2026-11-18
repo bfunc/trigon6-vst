@@ -116,13 +116,17 @@ ConnectionPage::ConnectionPage (Trigon6Processor& p) : proc (p)
     watchLabel.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (watchLabel);
     watchBox.addItem ("Off", 1);
-    watchBox.addItem ("Every 2 s", 2);
-    watchBox.addItem ("Every 0.25 s (stress test)", 3);
+    watchBox.addItem ("When you come back to the plugin", 2);
+    watchBox.addItem ("Every 2 s (cancels Write on the synth)", 3);
+    watchBox.addItem ("Every 0.25 s (stress test)", 4);
     watchBox.setSelectedId ((int) proc.getWatch() + 1, juce::dontSendNotification);
-    watchBox.setTooltip ("Init on the synth sends nothing, so the plugin can't see it. With this on, while nothing is being "
-                         "edited for a second, the plugin asks the synth for its current sound (a read; the sound doesn't "
-                         "change) and takes the synth's values when they differ. Not asked while Compare is held or when "
-                         "sending through the DAW.");
+    watchBox.setTooltip ("Init on the synth sends nothing, so the plugin can't see it. The plugin asks the synth for its "
+                         "current sound (a read; the sound doesn't change) and takes the synth's values when they differ.\n"
+                         "When you come back: when the plugin opens or the mouse comes onto it, and when a smooth knob "
+                         "(cutoff, resonance, levels) moves on the synth after a quiet spell. A request cancels Write mode "
+                         "on the synth, and in Write mode only stepped knobs send, so these never interrupt a save.\n"
+                         "The timed modes are for tests: they cancel Write mode on the synth.\n"
+                         "Never while Compare is held or when sending through the DAW.");
     watchBox.onChange = [this] { proc.setWatch ((Trigon6Processor::Watch) (watchBox.getSelectedId() - 1)); };
     addAndMakeVisible (watchBox);
     watchStats.setColour (juce::Label::textColourId, theme::dim);

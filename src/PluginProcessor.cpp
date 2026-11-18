@@ -166,13 +166,21 @@ void Trigon6Processor::timerCallback()
     {
         if (e.channel != ch)
             continue;
-        quietSinceMs = nowMs;  // a knob is moving on the synth: no watch request until it rests
         const int i = t6::indexOfNrpn (e.param);
         if (i < 0)
             continue;
         const auto& p = table[(size_t) i];
+        // A smooth knob after a quiet spell: the user is shaping the sound on the synth, not in Write mode (there only
+        // stepped knobs send), so it's safe to read the whole sound now (it may have been Init'ed).
+        const bool smooth = (p.kind == t6::Kind::Int || p.kind == t6::Kind::Bipolar) && p.max - p.min >= 100;
+        if (smooth && nowMs - synthQuietSinceMs >= 2000.0)
+            watchWanted = true;
+        synthQuietSinceMs = nowMs;
         const int current = (int) std::lround (raw[(size_t) i]->load()) + (p.kind == t6::Kind::Choice ? p.min : 0);
-        applyFromSynth ((size_t) i, juce::jlimit (p.min, p.max, t6::valueAfterNrpn (p, current, e.param, e.value)));
+        const int v = juce::jlimit (p.min, p.max, t6::valueAfterNrpn (p, current, e.param, e.value));
+        applyFromSynth ((size_t) i, v);
+        if (watchPending && (size_t) i < valuesAtWatch.size())
+            valuesAtWatch[(size_t) i] = v;  // the synth's own move: not an edit the reply could undo
     }
 }
 
@@ -198,13 +206,24 @@ void Trigon6Processor::watchTheSynth (double nowMs)
     }
 
     const auto w = watch.load();
-    if (w == Watch::Off || watchPending || soundPending || autoGetSoundMs > 0 || pushAtMs.load() >= 0 || previewing.load())
+    if (w == Watch::Off || ! wasConnected || link->isHostOutput())  // through the host, a request can't go out on time
+    {
+        watchWanted = false;
         return;
-    if (! wasConnected || link->isHostOutput())  // through the host, a request can't go out on time
+    }
+    if (watchPending || soundPending || autoGetSoundMs > 0 || pushAtMs.load() >= 0 || previewing.load())
         return;
     constexpr double kQuietMs = 1000.0;
-    if (nowMs - quietSinceMs < kQuietMs || nowMs < nextWatchMs)
+    if (nowMs - quietSinceMs < kQuietMs)
+        return;  // the plugin sent something: let it settle first
+
+    if (watchWanted && nowMs - watchAskedMs < 2000.0)
+        watchWanted = false;  // read moments ago: fresh enough
+    const bool timed = w == Watch::Every2s || w == Watch::Every250ms;
+    const bool timedDue = timed && nowMs - synthQuietSinceMs >= kQuietMs && nowMs >= nextWatchMs;
+    if (! watchWanted && ! timedDue)
         return;
+    watchWanted = false;
 
     watchPending = true;
     watchSeq = link->editBufferSeq();

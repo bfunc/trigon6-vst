@@ -118,10 +118,13 @@ Trigon6Editor::Trigon6Editor (Trigon6Processor& p) : AudioProcessorEditor (p), p
     setResizeLimits (1100, 640, 2600, 1500);
     setSize (kWood * 2 + 20 + PanelView::designSize().x, kTopBar + 38 + 20 + PanelView::designSize().y);  // the Panel tab at scale 1
     startTimerHz (4);
+    addMouseListener (this, true);
+    proc.watchNow();  // the plugin was opened: the user is at the computer
 }
 
 Trigon6Editor::~Trigon6Editor()
 {
+    removeMouseListener (this);
     savePanel.reset();
     tabs.reset();
     setLookAndFeel (nullptr);

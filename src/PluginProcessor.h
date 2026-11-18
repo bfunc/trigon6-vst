@@ -94,12 +94,15 @@ public:
     bool getResendOsc1OnPlay() const { return resendOsc1OnPlay.load(); }
     void setResendOsc1OnPlay (bool on);
 
-    // Watch the synth's sound (poll test): Init on the synth sends nothing, so while nothing is being edited the
-    // plugin asks for the edit buffer every few seconds and takes the synth's values when they differ. The preset
-    // (the slot reference) stays, so the panel shows how far the sound is from it. Not saved; on by default.
-    enum class Watch { Off, Every2s, Every250ms };
+    // Watch the synth's sound: Init on the synth sends nothing, so the plugin reads the edit buffer and takes the
+    // synth's values when they differ. The preset (the slot reference) stays, so the panel shows how far the sound is.
+    // A request cancels Write mode on the synth, and Write mode sends nothing, so by default (OnReturn) it reads only
+    // when the user is clearly not writing: back at the plugin (watchNow: the editor opens, the mouse comes onto it),
+    // or a smooth knob moved on the synth (in Write mode only stepped knobs send). The timed modes are for tests.
+    enum class Watch { Off, OnReturn, Every2s, Every250ms };
     Watch getWatch() const { return watch.load(); }
     void setWatch (Watch w) { watch = w; }
+    void watchNow() { watchWanted = true; }  // message thread
     struct WatchStats
     {
         int asked = 0, answered = 0, skipped = 0, taken = 0, timeouts = 0;
@@ -171,11 +174,13 @@ private:
     void setSlot (int bank, int program);
 
     // Watch (see getWatch). Message thread.
-    std::atomic<Watch> watch { Watch::Every2s };
+    std::atomic<Watch> watch { Watch::OnReturn };
     WatchStats watchStats;
-    bool watchPending = false;
+    bool watchPending = false, watchWanted = false;
     uint32_t watchSeq = 0;
-    double watchAskedMs = 0, nextWatchMs = 0, quietSinceMs = 0;
+    double watchAskedMs = -1.0e9, nextWatchMs = 0;
+    double quietSinceMs = 0;       // the plugin's last send
+    double synthQuietSinceMs = 0;  // the synth's last knob move on our channel
     int sentSeen = 0, sentAtWatch = 0, watchFailures = 0;
     std::vector<int> valuesAtWatch;
     void watchTheSynth (double nowMs);

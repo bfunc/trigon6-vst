@@ -20,6 +20,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void parentHierarchyChanged() override;  // the standalone's title bar shows the version
+    // The mouse comes onto the plugin (any child, through addMouseListener): the user is back at the computer, so
+    // read the synth's sound in case it changed on the synth (Init sends nothing). The processor limits how often.
+    void mouseEnter (const juce::MouseEvent&) override { proc.watchNow(); }
 
 private:
     void timerCallback() override;
