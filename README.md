@@ -96,8 +96,13 @@ Trigon ports open, the page says the port is busy.
 To play the synth's sound, add a separate **MIDI Out** channel (or route the audio in through your interface).
 That part is ordinary FL routing.
 
-**Send all** pushes every parameter to the synth. A project that loads does **not** send anything: the synth keeps its
-own sound until you press Send all or move a control.
+**The plugin and the synth always play the same sound.** When the plugin reaches the synth (at start, or when the
+synth comes back after being unplugged or switched off):
+- a project that loads in a DAW sends its saved sound to the synth's edit buffer, about half a second after it
+  opens (stored programs are not touched);
+- the standalone app and a newly added plugin read the synth's current sound (Get sound).
+
+**Send all** pushes every parameter to the synth at any time.
 
 **Osc 1 Octave jumps to +2 when FL starts or stops playing.** FL's MIDI Out sends something at transport start and stop that the synth
 takes as Osc 1 Octave (turning MIDI Out off stops it). Workaround, off by default: Connection page →

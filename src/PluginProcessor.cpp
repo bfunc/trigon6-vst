@@ -54,7 +54,8 @@ Trigon6Processor::Trigon6Processor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "Trigon6", createLayout()),
       queue (t6::paramTable().size()),
-      link (SynthLink::acquire())
+      link (SynthLink::acquire()),
+      projectWins (! juce::JUCEApplicationBase::isStandaloneApp())
 {
     for (const auto& p : t6::paramTable())
         raw.push_back (apvts.getRawParameterValue (p.id));
@@ -75,8 +76,34 @@ Trigon6Processor::~Trigon6Processor()
     pump.stopThread (1000);
 }
 
+void Trigon6Processor::meetTheSynth (double nowMs)
+{
+    const auto s = link->snapshot (midiChannel.load());
+    const bool connected = s.inOpen && (s.outOpen || s.hostOutput);
+    if (connected && ! wasConnected)
+    {
+        if (projectWins && projectLoaded.load())
+            pushAtMs = juce::jmax (pushAtMs.load(), nowMs + kMeetDelayMs);
+        else if (autoGetSoundMs < 0 && ! soundPending)
+            autoGetSoundMs = nowMs + kMeetDelayMs;
+    }
+    wasConnected = connected;
+
+    const double due = pushAtMs.load();
+    if (due >= 0)
+        autoGetSoundMs = -1;  // a project arrived: its sound wins over a read planned before it
+    if (due >= 0 && nowMs >= due && connected && ! soundPending)
+    {
+        pushAtMs = -1;
+        requestSendAll();
+        soundStatus = "Sent the project's sound to the synth (its stored programs are not touched)";
+    }
+}
+
 void Trigon6Processor::timerCallback()
 {
+    meetTheSynth (juce::Time::getMillisecondCounterHiRes());
+
     // A program picked on the synth's panel: that slot is now the origin; read the new sound shortly.
     const auto pc = link->lastProgramChange();
     if (pc.seq != pcSeen)
@@ -408,7 +435,10 @@ void Trigon6Processor::setStateInformation (const void* data, int size)
                 link->setHostOutput (apvts.state.getProperty (kOutputMode).toString() == "host");
             link->setPortChoice (apvts.state.getProperty (kInPort).toString(), apvts.state.getProperty (kOutPort).toString());
             resendOsc1OnPlay = (bool) apvts.state.getProperty (kResendOsc1, false);
-            needsPrime = true;  // a loaded project does not overwrite the synth; "Send all" does that
+            needsPrime = true;  // nothing goes out by itself on load; meetTheSynth() pushes the whole sound
+            projectLoaded = true;
+            if (projectWins)
+                pushAtMs = juce::Time::getMillisecondCounterHiRes() + kMeetDelayMs;  // again when the synth reconnects
         }
 }
 

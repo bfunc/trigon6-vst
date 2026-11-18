@@ -145,6 +145,15 @@ private:
     void takePresetFromCurrent();
     uint32_t pcSeen = 0;          // message thread: last SynthLink program change handled
     double autoGetSoundMs = -1;   // message thread: when to read the sound after a program change
+    // The plugin and the synth meet when the link comes up (at start, or after the synth was away). In a DAW a loaded
+    // project pushes its sound to the synth's edit buffer; otherwise (the standalone, a new plugin copy) the plugin
+    // reads the synth's sound. Waits kMeetDelayMs for a host that restores its state more than once.
+    static constexpr double kMeetDelayMs = 600.0;
+    const bool projectWins;                     // a DAW plugin, not the standalone app
+    std::atomic<bool> projectLoaded { false };  // setStateInformation ran (any thread)
+    std::atomic<double> pushAtMs { -1 };        // when to push the project's sound; -1 = not wanted
+    bool wasConnected = false;                  // message thread: the link was up at the last tick
+    void meetTheSynth (double nowMs);           // message thread, from the timer
     void setSlot (int bank, int program);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Trigon6Processor)
