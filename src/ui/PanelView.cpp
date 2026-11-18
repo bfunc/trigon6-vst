@@ -122,7 +122,7 @@ void drawKnob (juce::Graphics& g, Rectangle<float> box, int lo, int hi, int now,
     juce::Graphics::ScopedSaveState saved (g);
     g.addTransform (juce::AffineTransform::scale (box.getWidth() / 120.0f).translated (box.getX(), box.getY()));
 
-    const auto angle = [lo, hi] (int v) { return -135.0f + 270.0f * (float) (v - lo) / (float) juce::jmax (1, hi - lo); };
+    const auto angle = [lo, hi] (int v) { return -135.0f + 270.0f * (float) (juce::jlimit (lo, hi, v) - lo) / (float) juce::jmax (1, hi - lo); };  // a value past the knob's top sits at its end
     const auto pt = [] (float deg, float r) { return Point<float> (60.0f + r * std::sin (rad (deg)), 60.0f - r * std::cos (rad (deg))); };
     const auto arc = [] (float a1, float a2, float r)
     {
@@ -665,7 +665,7 @@ protected:
         const auto& m = b.front();
         const auto box = loc (g.main);  // the knob is a square, centred in the box it was given
         drawKnob (gr, Rectangle<float> (std::min (box.getWidth(), box.getHeight()), std::min (box.getWidth(), box.getHeight())).withCentre (box.getCentre()),
-                  m.def->min, m.def->max, m.value(), m.preset(), m.differs(), held || keyboard);
+                  m.def->min, t6::knobTop (*m.def), m.value(), m.preset(), m.differs(), held || keyboard);
         if (present (g.val))
         {
             gr.setColour (kBright);
@@ -704,10 +704,17 @@ protected:
 
     juce::String hintBack() const override { return "Double-click: back to the preset"; }
 
+    // The knob turns min..knobTop. Turning it starts from where it is drawn, so a stored value above the top (Osc PW
+    // 255) stays until the knob is touched, and the first move brings it into the knob's range.
+    int top() const { return t6::knobTop (*b.front().def); }
+    int turnedFrom() const { return juce::jmin (b.front().value(), top()); }
+    void turnTo (int v) const { const auto& m = b.front(); m.set (juce::jlimit (m.def->min, top(), v)); }
+    void stepBy (int d) const { const auto& m = b.front(); m.begin(); turnTo (turnedFrom() + d); m.end(); }
+
     void activate() override
     {
         const auto& m = b.front();
-        m.put (m.value() + juce::jmax (1, (m.def->max - m.def->min) / 20));
+        stepBy (juce::jmax (1, (top() - m.def->min) / 20));
         repaint();
     }
 
@@ -715,7 +722,7 @@ protected:
     {
         held = true;
         startY = e.position.y;
-        startValue = b.front().value();
+        startValue = turnedFrom();
         b.front().begin();
         grabKeyboardFocus();
         keyboard = false;
@@ -724,8 +731,8 @@ protected:
     void drag (const juce::MouseEvent& e) override
     {
         const auto& m = b.front();
-        const float perPixel = (float) (m.def->max - m.def->min) / (e.mods.isShiftDown() ? 800.0f : 200.0f);
-        m.set ((int) std::lround ((float) startValue + (startY - e.position.y) * perPixel));
+        const float perPixel = (float) (top() - m.def->min) / (e.mods.isShiftDown() ? 800.0f : 200.0f);
+        turnTo ((int) std::lround ((float) startValue + (startY - e.position.y) * perPixel));
         repaint();
     }
     void up (const juce::MouseEvent&) override
@@ -745,18 +752,18 @@ protected:
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w) override
     {
         const auto& m = b.front();
-        const int step = juce::jmax (1, (m.def->max - m.def->min) / 127);
-        m.put (m.value() + (w.deltaY > 0 ? step : -step));
+        const int step = juce::jmax (1, (top() - m.def->min) / 127);
+        stepBy (w.deltaY > 0 ? step : -step);
         repaint();
     }
     bool keyPressed (const juce::KeyPress& k) override
     {
         const auto& m = b.front();
-        const int step = juce::jmax (1, (m.def->max - m.def->min) / 127) * (k.getModifiers().isShiftDown() ? 8 : 1);
+        const int step = juce::jmax (1, (top() - m.def->min) / 127) * (k.getModifiers().isShiftDown() ? 8 : 1);
         if (k.isKeyCode (juce::KeyPress::upKey) || k.isKeyCode (juce::KeyPress::rightKey))
-            m.put (m.value() + step);
+            stepBy (step);
         else if (k.isKeyCode (juce::KeyPress::downKey) || k.isKeyCode (juce::KeyPress::leftKey))
-            m.put (m.value() - step);
+            stepBy (-step);
         else if (k.isKeyCode (juce::KeyPress::homeKey) || k.isKeyCode (juce::KeyPress::escapeKey))
             m.hasPreset() ? m.put (m.preset()) : m.toDefault();
         else

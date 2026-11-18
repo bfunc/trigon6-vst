@@ -87,9 +87,9 @@ GlobalInfo globalInfo (const GlobalDef& g)
                                       { "Off: own clock, sends none", "Out: own clock, sends it", "In: follows an incoming clock",
                                         "i-0: follows an incoming clock and sends it on", "nSS: follows an incoming clock, ignores start / stop" } };
     if (n == "Clock Port")   return { "Where the clock comes in and goes out.", { "MID: the 5-pin MIDI ports", "USB: the USB port" } };
-    if (n == "Param Xmit")   return { "How the synth sends knob and button moves. This plugin needs NR.",
+    if (n == "Param Xmit")   return { "How the synth sends knob and button moves. This plugin needs NR or nAS.",
                                       { "Off: sends nothing", "CC: control changes", "NR: NRPN (full resolution)",
-                                        "CAS: CC, with more of the panel (not checked yet)", "nAS: NRPN, with more of the panel (not checked yet)" } };
+                                        "CAS: CC, with more of the panel (not checked yet)", "nAS: NRPN, the same messages as NR (checked: Arp, Glide, Unison, a mod destination)" } };
     if (n == "Param Rcv")    return { "Which incoming messages change the sound. This plugin sends NRPN, so it needs NR.",
                                       { "Off: none", "CC: control changes", "NR: NRPN" } };
     if (n == "MIDI Control") return { "Whether the synth reacts to MIDI controllers: mod wheel, pitch bend, sustain and the like.",

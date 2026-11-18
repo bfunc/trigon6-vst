@@ -53,7 +53,14 @@ struct ParamDef
     // A value wider than a byte (Osc 2/3 Pitch, 0-1400): in a program dump the low byte sits at `nrpn` and the
     // high byte here. -1 = one byte.
     int highByte = -1;
+    // The top the panel knob turns to, when the synth's own knob stops below max (Osc PW: 0-209 on the synth, while
+    // NRPN and stored programs go to 255). A value above it (loaded or sent by the synth) is kept and shown as it is;
+    // the knob only stops there. -1 = max.
+    int knobMax = -1;
 };
+
+// The highest value the panel knob turns to (knobMax, else max).
+inline int knobTop (const ParamDef& p) { return p.knobMax >= 0 ? p.knobMax : p.max; }
 
 struct NrpnValue
 {

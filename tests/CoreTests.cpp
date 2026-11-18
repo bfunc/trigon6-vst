@@ -399,6 +399,10 @@ static void testTable()
     // one byte, 0..255, as found in 1000 stored programs (the manual says 0..127 / 0..254)
     for (int n : { 14, 15, 16, 30, 55, 56, 64 })
         CHECK (t[(size_t) indexOfNrpn (n)].max == 255);
+    // Osc PW: the knob turns 0..209 like the synth's; every other knob turns to its max
+    for (int n : { 14, 15, 16 })
+        CHECK (knobTop (t[(size_t) indexOfNrpn (n)]) == 209);
+    CHECK (knobTop (t[(size_t) indexOfNrpn (30)]) == 255 && knobTop (t[(size_t) indexOfNrpn (55)]) == 255);
 
     // the panel shows every parameter exactly once and names nothing unknown
     std::map<std::string, int> onPanel;
@@ -501,6 +505,7 @@ static LinkSnapshot connectedSnapshot()
         s.globalNrpnMs[n] = 6000;
     }
     s.globalsDump.assign (kGlobalCount, 0);
+    s.globalsDump[1035 - 1024] = 1;  // Local Ctrl On, as on a synth played from its own keys
     return s;
 }
 

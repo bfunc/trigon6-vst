@@ -51,9 +51,9 @@ struct LinkSnapshot
 
 constexpr double kProbeTimeoutMs = 2500;  // from the first request; the three requests go out 250 ms apart
 
-// The dump's order is assumed to be NRPN order (index = nrpn - 1024); that is not checked on the synth yet,
-// so a value seen only there is a guess: it never overrides proof and a mismatch is only a warning.
-constexpr bool kDumpOrderVerified = false;
+// The dump is in NRPN order (index = nrpn - 1024): checked on the synth 2026-11-18 (MIDI Clock Off -> Out -> Off moved
+// only its own value). A newer dump overrides an older NRPN, and a mismatch seen there is an error, not a warning.
+constexpr bool kDumpOrderVerified = true;
 
 // A CC number that a panel control would send with Param Xmit = CC (not a wheel, pedal or NRPN part).
 bool isParameterCc (int cc);

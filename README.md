@@ -78,8 +78,9 @@ The plugin opens on **Connection** unless the synth is fully connected (then it 
 Settings are known from three sources, in this order: what the synth sends when you change a global (Param Xmit
 1029, Param Rcv 1030, MIDI SysEx 1032, MIDI Out 1033; values in the panel's order, e.g. Param Xmit 0 Off, 1 CC,
 2 NR), what the traffic proves (knob moves over USB prove MIDI Out = USB and Param Xmit = NR; a dump proves SysEx =
-USB), and the global dump. The dump's order is not checked yet (assumed NRPN order), so a value seen only there is
-marked "?", never overrides proof, and a mismatch is only a warning. The page shows the dump's raw values.
+USB), and the global dump. The dump is in NRPN order (checked on the synth: changing MIDI Clock moved only its own
+value), so a dump newer than the synth's last message wins and a wrong value there is an error. The page shows the
+dump's raw values.
 
 Windows gives a MIDI port to one program at a time. If FL Studio (or the standalone app, or another program) has the
 Trigon ports open, the page says the port is busy.
@@ -184,7 +185,7 @@ local only: `-DT6_PLAYTEST=ON`) checks the preset reference, the reset and the o
 4. ✅ Feedback: NRPNs from the synth update the plugin without being sent back; an NRPN monitor on the Connection page.
 5. ✅ Get sound: the edit buffer over SysEx, each parameter read at its NRPN number (checked across 1000 stored
    programs). Presets tab, Save to a slot (with backup and read-back) or a .syx file.
-6. Not done yet: the global dump's byte order (Connection page marks values seen only there with "?").
+6. ✅ The global dump's byte order: NRPN order, checked on the synth.
 
 ## Licence
 

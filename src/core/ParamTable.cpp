@@ -57,6 +57,13 @@ ParamDef sawRamp (int nrpn, int nrpn2, const char* id, const char* name, S s)
     return p;
 }
 
+// Osc PW: the synth's knob turns 0-209; above that the pulse thins to silence (checked on the synth 2026-11-18).
+ParamDef knobTo (ParamDef p, int top)
+{
+    p.knobMax = top;
+    return p;
+}
+
 ParamDef wide (ParamDef p, int highByte)
 {
     p.highByte = highByte;
@@ -104,9 +111,11 @@ std::vector<ParamDef> build()
         onOff (11, "osc1_pulse", "Osc 1 Pulse", S::Oscillators),
         onOff (12, "osc2_pulse", "Osc 2 Pulse", S::Oscillators),
         onOff (13, "osc3_pulse", "Osc 3 Pulse", S::Oscillators),
-        num  (14, "osc1_pw", "Osc 1 PW", S::Oscillators, 0, 255), // one byte, 0..255 (127 = square): about 1 in 3 stored programs are above 127
-        num  (15, "osc2_pw", "Osc 2 PW", S::Oscillators, 0, 255), // one byte, 0..255 (127 = square): about 1 in 3 stored programs are above 127
-        num  (16, "osc3_pw", "Osc 3 PW", S::Oscillators, 0, 255), // one byte, 0..255 (127 = square): about 1 in 3 stored programs are above 127
+        // one byte, 0..255 over NRPN and in programs; the synth's knob turns 0..209 and so does the panel knob.
+        // In 1000 stored programs 12 audible oscillators sit above 209 (221, 255): they load unchanged.
+        knobTo (num (14, "osc1_pw", "Osc 1 PW", S::Oscillators, 0, 255), 209),
+        knobTo (num (15, "osc2_pw", "Osc 2 PW", S::Oscillators, 0, 255), 209),
+        knobTo (num (16, "osc3_pw", "Osc 3 PW", S::Oscillators, 0, 255), 209),
         onOff (20, "osc2_sync", "Sync Osc 2", S::Oscillators),          // manual: "Osc 1 Sync"
         onOff (21, "osc3_keyboard", "Osc 3 Keyboard", S::Oscillators),  // manual: "Osc 1 Keyboard"; only Osc 3 has it
 
