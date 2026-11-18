@@ -245,20 +245,25 @@ void ConnectionPage::paint (juce::Graphics& g)
     paintChecklist (g, checklistArea);
     paintGlobals (g, globalsArea);
 
-    // Status line: the raw global dump, to check the dump's order against the synth
+    // Status line: the raw global dump (its order is NRPN order, checked on the synth)
     juce::String status;
     if (snap.globalsMs >= 0)
     {
         status << "Global dump: ";
         for (size_t i = 0; i < snap.globalsDump.size(); ++i)
             status << snap.globalsDump[i] << (i + 1 < snap.globalsDump.size() ? " " : "");
-        status << "   |   ? = value from the dump only (order not checked yet)   |   white frame = button to press now";
+        status << (t6::kDumpOrderVerified ? "   |   white frame = button to press now"
+                                          : "   |   ? = value from the dump only (order not checked yet)   |   white frame = button to press now");
     }
     else
         status = "No global dump yet: press Check (needs MIDI SysEx = USB). Values also appear when you change a setting on the synth.";
     g.setColour (theme::dim);
     g.setFont (juce::FontOptions (12.5f));
-    g.drawFittedText (status, statusArea, juce::Justification::centredLeft, 1, 0.9f);
+    auto statusText = statusArea;
+    const auto version = statusText.removeFromRight (260);
+    g.drawFittedText (status, statusText.withTrimmedRight (12), juce::Justification::centredLeft, 1, 0.9f);
+    g.setColour (theme::text.withAlpha (0.75f));
+    g.drawText (juce::String ("Trigon6 Control ") + T6_VERSION_TEXT, version, juce::Justification::centredRight, true);
 }
 
 void ConnectionPage::paintChecklist (juce::Graphics& g, juce::Rectangle<int> area)

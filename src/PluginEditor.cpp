@@ -150,6 +150,15 @@ void Trigon6Editor::paint (juce::Graphics& g)
     g.fillRect ((float) kWood, (float) kTopBar - 1.0f, r.getWidth() - 2.0f * (float) kWood, 1.0f);
 }
 
+void Trigon6Editor::parentHierarchyChanged()
+{
+    // In a DAW the host owns the window title; the version is on the Connection tab.
+    if (! juce::JUCEApplicationBase::isStandaloneApp())
+        return;
+    if (auto* window = getTopLevelComponent(); window != nullptr && window != this)
+        window->setName (juce::String ("Trigon6 Control ") + T6_VERSION_TEXT);
+}
+
 void Trigon6Editor::resized()
 {
     auto r = getLocalBounds().reduced (kWood, 0);

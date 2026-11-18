@@ -19,6 +19,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void parentHierarchyChanged() override;  // the standalone's title bar shows the version
 
 private:
     void timerCallback() override;

@@ -25,14 +25,17 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             [ "$GITHUB_REF_NAME" = "v$VER" ] || { echo "tag $GITHUB_REF_NAME does not match label $VER"; exit 1; }
             ZIP="Trigon6Control-$VER-windows.zip"
+            BUILD=release
           else
             ZIP="Trigon6Control-latest-$VER-windows.zip"
+            BUILD="${GITHUB_SHA::7}"
           fi
           printf 'Trigon6 Control %s\nCommit: %s\nBuilt: %s\n' "$VER" "${GITHUB_SHA::7}" "$(date -u '+%Y-%m-%d %H:%M UTC')" > VERSION.txt
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+          echo "BUILD=$BUILD" >> "$GITHUB_ENV"
 
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release "-DT6_BUILD=${{ env.BUILD }}"
 
       - name: Build
         run: cmake --build build --config Release --parallel 4
