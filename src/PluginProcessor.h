@@ -94,6 +94,20 @@ public:
     bool getResendOsc1OnPlay() const { return resendOsc1OnPlay.load(); }
     void setResendOsc1OnPlay (bool on);
 
+    // Watch the synth's sound (poll test): Init on the synth sends nothing, so while nothing is being edited the
+    // plugin asks for the edit buffer every few seconds and takes the synth's values when they differ. The preset
+    // (the slot reference) stays, so the panel shows how far the sound is from it. Not saved; on by default.
+    enum class Watch { Off, Every2s, Every250ms };
+    Watch getWatch() const { return watch.load(); }
+    void setWatch (Watch w) { watch = w; }
+    struct WatchStats
+    {
+        int asked = 0, answered = 0, skipped = 0, taken = 0, timeouts = 0;
+        double lastReplyMs = -1, slowestReplyMs = -1;
+        juce::String lastTaken;  // what the last change was, for the test
+    };
+    const WatchStats& getWatchStats() const { return watchStats; }  // message thread
+
 private:
     template <typename Emit>
     void runQueue (Emit&& emit);  // the caller holds queueLock
@@ -155,6 +169,17 @@ private:
     bool wasConnected = false;                  // message thread: the link was up at the last tick
     void meetTheSynth (double nowMs);           // message thread, from the timer
     void setSlot (int bank, int program);
+
+    // Watch (see getWatch). Message thread.
+    std::atomic<Watch> watch { Watch::Every2s };
+    WatchStats watchStats;
+    bool watchPending = false;
+    uint32_t watchSeq = 0;
+    double watchAskedMs = 0, nextWatchMs = 0, quietSinceMs = 0;
+    int sentSeen = 0, sentAtWatch = 0, watchFailures = 0;
+    std::vector<int> valuesAtWatch;
+    void watchTheSynth (double nowMs);
+    void takeWatched (const std::vector<uint8_t>& data, double nowMs);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Trigon6Processor)
 };

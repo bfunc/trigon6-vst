@@ -121,19 +121,37 @@ void Trigon6Processor::timerCallback()
         requestGetSound();
     }
 
+    const double nowMs = juce::Time::getMillisecondCounterHiRes();
+    const auto editSeq = link->editBufferSeq();
     if (soundPending)
     {
-        if (link->editBufferSeq() != soundSeq)
+        if (editSeq != soundSeq)
         {
             soundPending = false;
+            watchPending = false;  // the same dump answers a watch request too; Get sound takes it whole
             applySound (link->editBuffer());
         }
-        else if (juce::Time::getMillisecondCounterHiRes() - soundAskedMs > 3000)
+        else if (nowMs - soundAskedMs > 3000)
         {
             soundPending = false;
             soundStatus = "No sound came back. Check the Connection tab (MIDI SysEx = USB).";
         }
     }
+    if (watchPending)
+    {
+        if (editSeq != watchSeq)
+        {
+            watchPending = false;
+            takeWatched (link->editBuffer(), nowMs);
+        }
+        else if (nowMs - watchAskedMs > 3000)
+        {
+            watchPending = false;
+            ++watchStats.timeouts;
+            ++watchFailures;  // ask less often until the synth answers again
+        }
+    }
+    watchTheSynth (nowMs);
 
     std::vector<SynthLink::InEvent> events;
     incomingSeen = link->readIncoming (incomingSeen, events);
@@ -148,6 +166,7 @@ void Trigon6Processor::timerCallback()
     {
         if (e.channel != ch)
             continue;
+        quietSinceMs = nowMs;  // a knob is moving on the synth: no watch request until it rests
         const int i = t6::indexOfNrpn (e.param);
         if (i < 0)
             continue;
@@ -166,6 +185,83 @@ void Trigon6Processor::applyFromSynth (size_t i, int v)
         const float plain = (float) (p.kind == t6::Kind::Choice ? v - p.min : v);
         param->setValueNotifyingHost (param->convertTo0to1 (plain));
     }
+}
+
+void Trigon6Processor::watchTheSynth (double nowMs)
+{
+    // Anything the plugin sends (a knob, Compare, a whole sound) restarts the quiet time.
+    const int sent = sentCount.load();
+    if (sent != sentSeen)
+    {
+        sentSeen = sent;
+        quietSinceMs = nowMs;
+    }
+
+    const auto w = watch.load();
+    if (w == Watch::Off || watchPending || soundPending || autoGetSoundMs > 0 || pushAtMs.load() >= 0 || previewing.load())
+        return;
+    if (! wasConnected || link->isHostOutput())  // through the host, a request can't go out on time
+        return;
+    constexpr double kQuietMs = 1000.0;
+    if (nowMs - quietSinceMs < kQuietMs || nowMs < nextWatchMs)
+        return;
+
+    watchPending = true;
+    watchSeq = link->editBufferSeq();
+    watchAskedMs = nowMs;
+    sentAtWatch = sent;
+    valuesAtWatch = currentValues();
+    ++watchStats.asked;
+    link->requestEditBuffer();
+    const double every = w == Watch::Every250ms ? 250.0 : 2000.0;
+    nextWatchMs = nowMs + juce::jmin (30000.0, every * (double) (1 << juce::jmin (watchFailures, 4)));
+}
+
+void Trigon6Processor::takeWatched (const std::vector<uint8_t>& data, double nowMs)
+{
+    const double took = nowMs - watchAskedMs;  // up to one timer tick (33 ms) more than the real reply time
+    watchStats.lastReplyMs = took;
+    watchStats.slowestReplyMs = juce::jmax (watchStats.slowestReplyMs, took);
+    ++watchStats.answered;
+    watchFailures = 0;
+
+    // Something was edited or sent while the reply was on its way: it may be older than the edit. Skip it; the next
+    // request comes after the next quiet second.
+    if (sentCount.load() != sentAtWatch || previewing.load() || currentValues() != valuesAtWatch)
+    {
+        ++watchStats.skipped;
+        return;
+    }
+
+    const auto& table = t6::paramTable();
+    std::vector<std::pair<size_t, int>> changes;
+    for (size_t i = 0; i < table.size() && i < valuesAtWatch.size(); ++i)
+    {
+        const auto& p = table[i];
+        const int v = t6::valueFromProgram (p, data);
+        if (v < p.min || v > p.max)
+            continue;  // not read (-1) or impossible: Get sound reports those
+        if (v != valuesAtWatch[i])
+            changes.emplace_back (i, v);
+    }
+    if (changes.empty())
+        return;
+
+    {
+        // Not osc1Octave: if FL's MIDI Out knocked Osc 1 Octave to +2, the re-send must still restore the old value.
+        const juce::ScopedLock sl (queueLock);
+        for (const auto& [i, v] : changes)
+            applyFromSynth (i, v);
+    }
+    origin.name = t6::programName (data);
+    ++watchStats.taken;
+    juce::StringArray names;
+    for (const auto& c : changes)
+        if (names.size() < 4)
+            names.add (table[c.first].name);
+    watchStats.lastTaken = juce::Time::getCurrentTime().formatted ("%H:%M:%S ") + juce::String ((int) changes.size())
+                         + " (" + names.joinIntoString (", ") + (changes.size() > 4 ? ", ..." : "") + ")";
+    soundStatus = "The synth's sound changed on the synth: took " + juce::String ((int) changes.size()) + " values from it";
 }
 
 void Trigon6Processor::requestGetSound()

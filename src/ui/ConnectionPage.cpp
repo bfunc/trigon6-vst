@@ -111,6 +111,25 @@ ConnectionPage::ConnectionPage (Trigon6Processor& p) : proc (p)
     resendOsc1.onClick = [this] { proc.setResendOsc1OnPlay (resendOsc1.getToggleState()); };
     addAndMakeVisible (resendOsc1);
 
+    watchLabel.setText ("Watch the synth's sound", juce::dontSendNotification);
+    watchLabel.setColour (juce::Label::textColourId, theme::text);
+    watchLabel.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (watchLabel);
+    watchBox.addItem ("Off", 1);
+    watchBox.addItem ("Every 2 s", 2);
+    watchBox.addItem ("Every 0.25 s (stress test)", 3);
+    watchBox.setSelectedId ((int) proc.getWatch() + 1, juce::dontSendNotification);
+    watchBox.setTooltip ("Init on the synth sends nothing, so the plugin can't see it. With this on, while nothing is being "
+                         "edited for a second, the plugin asks the synth for its current sound (a read; the sound doesn't "
+                         "change) and takes the synth's values when they differ. Not asked while Compare is held or when "
+                         "sending through the DAW.");
+    watchBox.onChange = [this] { proc.setWatch ((Trigon6Processor::Watch) (watchBox.getSelectedId() - 1)); };
+    addAndMakeVisible (watchBox);
+    watchStats.setColour (juce::Label::textColourId, theme::dim);
+    watchStats.setFont (juce::FontOptions (12.0f));
+    watchStats.setMinimumHorizontalScale (0.7f);
+    addAndMakeVisible (watchStats);
+
     monitorTitle.setText ("NRPN from the synth (newest first): turn a knob or press a button on the synth", juce::dontSendNotification);
     monitorTitle.setColour (juce::Label::textColourId, theme::dim);
     addAndMakeVisible (monitorTitle);
@@ -178,6 +197,19 @@ void ConnectionPage::timerCallback()
         }
     }
 
+    {
+        const auto& w = proc.getWatchStats();
+        juce::String t;
+        t << "asked " << w.asked << ", answered " << w.answered << ", no reply " << w.timeouts << ", skipped " << w.skipped;
+        if (w.lastReplyMs >= 0)
+            t << ", reply " << juce::roundToInt (w.lastReplyMs) << " ms (slowest " << juce::roundToInt (w.slowestReplyMs) << ")";
+        t << ", changes taken " << w.taken;
+        if (w.lastTaken.isNotEmpty())
+            t << ", last " << w.lastTaken;
+        watchStats.setText (t, juce::dontSendNotification);
+        watchStats.setTooltip (t);
+    }
+
     snap = proc.getLink().snapshot (proc.getMidiChannel());
     const bool was = report.allOk;
     report = t6::evaluate (snap);
@@ -229,6 +261,15 @@ void ConnectionPage::resized()
     statusArea = r.removeFromBottom (20);
     r.removeFromBottom (6);
     auto monitorArea = r.removeFromBottom (150);
+    r.removeFromBottom (8);
+    {
+        auto w = r.removeFromBottom (26);
+        watchLabel.setBounds (w.removeFromLeft (180));
+        w.removeFromLeft (8);
+        watchBox.setBounds (w.removeFromLeft (220));
+        w.removeFromLeft (12);
+        watchStats.setBounds (w);
+    }
     r.removeFromBottom (8);
     auto monitorBar = monitorArea.removeFromTop (24);
     clearMonitor.setBounds (monitorBar.removeFromRight (70));
