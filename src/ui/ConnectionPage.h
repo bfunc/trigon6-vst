@@ -42,9 +42,6 @@ private:
     juce::TextButton check { "Check" }, playNote { "Play test note" }, heard { "I heard it" }, notHeard { "No sound" };
     juce::TextButton useChannel;
     juce::ToggleButton resendOsc1 { "Re-send Osc 1 Octave on play" };
-    // Watch the synth's sound (poll test): how often, and what happened so far.
-    juce::Label watchLabel, watchStats;
-    juce::ComboBox watchBox;
     juce::StringArray inNames, outNames;
 
     juce::Rectangle<int> checklistArea, globalsArea, statusArea;

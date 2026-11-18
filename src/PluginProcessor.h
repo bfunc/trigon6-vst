@@ -94,23 +94,6 @@ public:
     bool getResendOsc1OnPlay() const { return resendOsc1OnPlay.load(); }
     void setResendOsc1OnPlay (bool on);
 
-    // Watch the synth's sound: Init on the synth sends nothing, so the plugin reads the edit buffer and takes the
-    // synth's values when they differ. The preset (the slot reference) stays, so the panel shows how far the sound is.
-    // A request cancels Write mode on the synth, and Write mode sends nothing, so by default (OnReturn) it reads only
-    // when the user is clearly not writing: back at the plugin (watchNow: the editor opens, the mouse comes onto it),
-    // or a smooth knob moved on the synth (in Write mode only stepped knobs send). The timed modes are for tests.
-    enum class Watch { Off, OnReturn, Every2s, Every250ms };
-    Watch getWatch() const { return watch.load(); }
-    void setWatch (Watch w) { watch = w; }
-    void watchNow() { watchWanted = true; }  // message thread
-    struct WatchStats
-    {
-        int asked = 0, answered = 0, skipped = 0, taken = 0, timeouts = 0;
-        double lastReplyMs = -1, slowestReplyMs = -1;
-        juce::String lastTaken;  // what the last change was, for the test
-    };
-    const WatchStats& getWatchStats() const { return watchStats; }  // message thread
-
 private:
     template <typename Emit>
     void runQueue (Emit&& emit);  // the caller holds queueLock
@@ -172,19 +155,6 @@ private:
     bool wasConnected = false;                  // message thread: the link was up at the last tick
     void meetTheSynth (double nowMs);           // message thread, from the timer
     void setSlot (int bank, int program);
-
-    // Watch (see getWatch). Message thread.
-    std::atomic<Watch> watch { Watch::OnReturn };
-    WatchStats watchStats;
-    bool watchPending = false, watchWanted = false;
-    uint32_t watchSeq = 0;
-    double watchAskedMs = -1.0e9, nextWatchMs = 0;
-    double quietSinceMs = 0;       // the plugin's last send
-    double synthQuietSinceMs = 0;  // the synth's last knob move on our channel
-    int sentSeen = 0, sentAtWatch = 0, watchFailures = 0;
-    std::vector<int> valuesAtWatch;
-    void watchTheSynth (double nowMs);
-    void takeWatched (const std::vector<uint8_t>& data, double nowMs);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Trigon6Processor)
 };
